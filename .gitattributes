@@ -1,0 +1,25 @@
+# Текстовые файлы хранятся в репозитории с LF, при checkout получают окончания,
+# принятые в системе (CRLF на Windows, LF на macOS/Linux).
+* text=auto
+
+# Скрипты Windows — всегда CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Shell-скрипты — всегда LF
+*.sh text eol=lf
+
+# Бинарные файлы — окончания строк не трогаем
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.avif binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.pdf binary
