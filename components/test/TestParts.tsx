@@ -1,0 +1,81 @@
+"use client";
+
+import { useTestContext } from "./TestContext";
+
+// Части страницы теста, которые читают общий тестовый контекст.
+
+const TEST_START_ID = "test-start";
+
+function useRequiredTest() {
+  const test = useTestContext();
+  if (!test) throw new Error("Компонент теста используется вне TestProvider");
+  return test;
+}
+
+export function TestProgress() {
+  const { answeredCount, total } = useRequiredTest();
+  const percent = total === 0 ? 0 : Math.round((answeredCount / total) * 100);
+
+  return (
+    // tabIndex={-1} — сюда переводится фокус при «Пройти заново»
+    <div
+      id={TEST_START_ID}
+      tabIndex={-1}
+      className="sticky top-0 z-10 space-y-2 bg-background py-3 outline-none"
+    >
+      <div className="flex justify-between text-sm text-foreground/70">
+        <span>
+          Отвечено {answeredCount} из {total}
+        </span>
+        <span>{percent}%</span>
+      </div>
+      <div
+        className="h-2 overflow-hidden rounded-full bg-foreground/10"
+        role="progressbar"
+        aria-label="Прогресс теста"
+        aria-valuetext={`Отвечено ${answeredCount} из ${total}`}
+        aria-valuenow={answeredCount}
+        aria-valuemin={0}
+        aria-valuemax={total}
+      >
+        <div className="h-full bg-foreground transition-all" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
+}
+
+// Обёртка для вопросов: при «пройти заново» меняется key, и все упражнения
+// сбрасываются в начальное состояние.
+export function TestQuestions({ children }: { children: React.ReactNode }) {
+  const { attempt } = useRequiredTest();
+  return <div key={attempt}>{children}</div>;
+}
+
+export function TestSummary() {
+  const { isFinished, score, total, restart } = useRequiredTest();
+  if (!isFinished) return null;
+
+  // Баллы могут быть дробными, когда появится частичная правильность
+  const rounded = Math.round(score * 10) / 10;
+
+  return (
+    <section className="space-y-3 rounded-lg border border-foreground/15 p-5">
+      <h2 className="text-xl font-semibold">Тест завершён</h2>
+      <p>
+        Ваш результат: {rounded} из {total}
+      </p>
+      <button
+        type="button"
+        onClick={() => {
+          restart();
+          // Сводка исчезает вместе с кнопкой — переводим фокус и прокрутку к началу теста
+          window.scrollTo({ top: 0 });
+          document.getElementById(TEST_START_ID)?.focus({ preventScroll: true });
+        }}
+        className="rounded-md border border-foreground/20 px-4 py-2 text-sm hover:bg-foreground/5"
+      >
+        Пройти заново
+      </button>
+    </section>
+  );
+}

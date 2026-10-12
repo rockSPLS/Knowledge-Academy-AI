@@ -1,0 +1,79 @@
+import "server-only";
+import type { Exercise } from "./types";
+
+// Банк вопросов. Файл помечен server-only: если его случайно импортировать
+// в браузерный код, сборка упадёт — так правильные ответы не утекут на клиент.
+// Одни и те же вопросы используются и в статьях, и в итоговом тесте.
+
+const exercises: Exercise[] = [
+  {
+    id: "hallucinations-definition",
+    type: "multiple-choice",
+    question: "Что называют галлюцинацией языковой модели?",
+    options: [
+      { id: "a", text: "Сбой сервера, из-за которого модель выдаёт бессвязный текст" },
+      { id: "b", text: "Уверенный и правдоподобный ответ с выдуманной или неверной информацией" },
+      { id: "c", text: "Отказ модели отвечать на вопрос" },
+      { id: "d", text: "Ответ с опечатками и грамматическими ошибками" },
+    ],
+    correct: ["b"],
+    explanation:
+      "Галлюцинация — это не сбой и не отказ. Модель выдаёт правдоподобное продолжение текста, а не проверенный факт, поэтому выдумка звучит так же убедительно, как правда.",
+  },
+  {
+    id: "hallucinations-cause",
+    type: "multiple-choice",
+    question: "Почему модель вообще может уверенно выдумывать факты?",
+    options: [
+      { id: "a", text: "Она ищет ответ в интернете и иногда попадает на сайты с ошибками" },
+      { id: "b", text: "Разработчики специально добавляют ошибки, чтобы ответы были разнообразнее" },
+      { id: "c", text: "Она предсказывает правдоподобный текст и не проверяет, истинен ли он" },
+      { id: "d", text: "Она устаёт к концу длинного разговора" },
+    ],
+    correct: ["c"],
+    explanation:
+      "Задача модели — продолжить текст так, чтобы он хорошо звучал в контексте. Истинность она не проверяет: если о чём-то данных мало, пробел заполняется тем, что «обычно бывает в таких случаях».",
+  },
+  {
+    id: "hallucinations-red-flags",
+    type: "multiple-choice",
+    question: "Какие признаки в ответе модели должны насторожить? Выберите все подходящие.",
+    options: [
+      { id: "a", text: "Точные даты и номера страниц о малоизвестном предмете" },
+      { id: "b", text: "Ссылка, которая подозрительно идеально подтверждает вашу мысль" },
+      { id: "c", text: "Модель прямо говорит, что не уверена в части деталей" },
+      { id: "d", text: "При повторном вопросе другими словами детали меняются" },
+    ],
+    correct: ["a", "b", "d"],
+    explanation:
+      "Избыточная конкретика о редком, «идеальные» источники и нестабильность деталей — типичные признаки выдумки. А честная оговорка о неуверенности, наоборот, хороший знак.",
+  },
+];
+
+// Проверка целостности банка при запуске: опечатка в id сделала бы вопрос
+// нерешаемым, а дубль id — молча скрыл бы один из вопросов.
+function validateBank(list: Exercise[]) {
+  const ids = new Set<string>();
+  for (const exercise of list) {
+    if (ids.has(exercise.id)) throw new Error(`Банк вопросов: повторяется id "${exercise.id}"`);
+    ids.add(exercise.id);
+
+    const optionIds = new Set(exercise.options.map((option) => option.id));
+    if (optionIds.size !== exercise.options.length) {
+      throw new Error(`Банк вопросов: повторяются id вариантов в "${exercise.id}"`);
+    }
+    if (exercise.correct.length === 0 || !exercise.correct.every((id) => optionIds.has(id))) {
+      throw new Error(`Банк вопросов: неверный список правильных ответов в "${exercise.id}"`);
+    }
+  }
+}
+
+validateBank(exercises);
+
+export function getExercise(id: string): Exercise | undefined {
+  return exercises.find((exercise) => exercise.id === id);
+}
+
+export function getAllExerciseIds(): string[] {
+  return exercises.map((exercise) => exercise.id);
+}

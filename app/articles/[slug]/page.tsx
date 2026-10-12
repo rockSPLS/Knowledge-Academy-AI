@@ -25,16 +25,16 @@ export default async function ArticlePage({ params }: PageProps<"/articles/[slug
   const article = getArticle(slug);
   if (!article) notFound();
 
+  // Текст статьи — MDX-файл в content/articles/
+  const { default: ArticleContent } = await import(`@/content/articles/${slug}.mdx`);
+
   return (
-    <article className="space-y-6">
+    <article>
       <Link href="/articles" className="text-sm text-foreground/60 hover:text-foreground">
         ← Все статьи
       </Link>
-      <h1 className="text-3xl font-semibold">{article.title}</h1>
-      <p className="text-lg text-foreground/70">{article.description}</p>
-      <p className="rounded-lg border border-dashed border-foreground/20 p-4 text-foreground/60">
-        Текст статьи с упражнениями появится здесь.
-      </p>
+      <h1 className="mt-6 text-3xl font-semibold">{article.title}</h1>
+      <ArticleContent />
     </article>
   );
 }

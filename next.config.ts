@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
+import createMDX from "@next/mdx";
 
 const nextConfig: NextConfig = {
-  /* здесь задаются параметры конфигурации */
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {
@@ -14,4 +14,7 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Подключает обработку .mdx-файлов (тексты статей лежат в content/articles/)
+const withMDX = createMDX();
+
+export default withMDX(nextConfig);
