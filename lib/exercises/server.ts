@@ -12,9 +12,25 @@ export function toPublicExercise(exercise: Exercise): PublicExercise {
   }
 }
 
+// Проверяет ответ и решает, раскрывать ли правильный ответ.
+// Правило одно для всех типов: разбор отдаётся, если ответ полностью верный
+// или если раскрытие запрошено явно (кнопка «Показать ответ» или режим теста).
 // Возвращает null, если ответ не подходит для этого упражнения
 // (неверный формат, варианты, которых в упражнении нет, или отмечено больше вариантов, чем верных)
-export function checkAnswer(exercise: Exercise, answer: unknown): CheckResult | null {
+export function checkAnswer(
+  exercise: Exercise,
+  answer: unknown,
+  reveal: boolean,
+): CheckResult | null {
+  const result = evaluate(exercise, answer);
+  if (!result) return null;
+  if (reveal || result.verdict === "correct") return result;
+  const withoutReview = { ...result };
+  delete withoutReview.review;
+  return withoutReview;
+}
+
+function evaluate(exercise: Exercise, answer: unknown): CheckResult | null {
   switch (exercise.type) {
     case "multiple-choice": {
       const parsed = multipleChoice.answerSchema.safeParse(answer);
