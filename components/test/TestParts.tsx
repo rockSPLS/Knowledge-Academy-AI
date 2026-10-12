@@ -23,14 +23,14 @@ export function TestProgress() {
       tabIndex={-1}
       className="sticky top-0 z-10 space-y-2 bg-background py-3 outline-none"
     >
-      <div className="flex justify-between text-sm text-foreground/70">
+      <div className="flex justify-between text-sm text-muted">
         <span>
           Отвечено {answeredCount} из {total}
         </span>
         <span>{percent}%</span>
       </div>
       <div
-        className="h-2 overflow-hidden rounded-full bg-foreground/10"
+        className="h-2 overflow-hidden rounded-full bg-border"
         role="progressbar"
         aria-label="Прогресс теста"
         aria-valuetext={`Отвечено ${answeredCount} из ${total}`}
@@ -38,7 +38,7 @@ export function TestProgress() {
         aria-valuemin={0}
         aria-valuemax={total}
       >
-        <div className="h-full bg-foreground transition-all" style={{ width: `${percent}%` }} />
+        <div className="h-full bg-accent transition-all" style={{ width: `${percent}%` }} />
       </div>
     </div>
   );
@@ -62,7 +62,7 @@ export function TestSummary() {
   });
 
   return (
-    <section className="space-y-3 rounded-lg border border-foreground/15 p-5">
+    <section className="space-y-3 rounded-xl border border-border bg-surface p-5">
       <h2 className="text-xl font-semibold">Тест завершён</h2>
       <p>
         Ваш результат: {formattedScore} из {total}
@@ -75,7 +75,7 @@ export function TestSummary() {
           window.scrollTo({ top: 0 });
           document.getElementById(TEST_START_ID)?.focus({ preventScroll: true });
         }}
-        className="rounded-md border border-foreground/20 px-4 py-2 text-sm hover:bg-foreground/5"
+        className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover"
       >
         Пройти заново
       </button>

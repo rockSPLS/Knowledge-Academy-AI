@@ -1,17 +1,26 @@
 import Link from "next/link";
 import { NavLink } from "./NavLink";
+import { ThemeToggle } from "./ThemeToggle";
+
+// Шапка сайта. Правая часть — место для действий на любой странице:
+// сейчас там «Пройти тест» и переключатель темы, позже — индикатор прогресса.
 
 export function SiteHeader() {
   return (
-    <header className="border-b border-foreground/10">
-      <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-4">
-        <Link href="/" className="font-semibold">
+    <header className="border-b border-border">
+      <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3">
+        <Link href="/" className="font-semibold hover:text-accent">
           Prompt Engineering Academy
         </Link>
-        <nav className="flex gap-6 text-sm">
-          <NavLink href="/articles">Статьи</NavLink>
-          <NavLink href="/test">Тест</NavLink>
-        </nav>
+        <div className="flex items-center gap-2">
+          <NavLink
+            href="/test"
+            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover"
+          >
+            Пройти тест
+          </NavLink>
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );

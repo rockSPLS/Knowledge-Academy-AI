@@ -22,12 +22,21 @@ export const metadata: Metadata = {
   description: "Промпт-инжиниринг на практике: статьи с упражнениями прямо в тексте.",
 };
 
+// Выставляет сохранённую тему до первой отрисовки, чтобы страница не мигала светлой
+// (приём из руководства Next.js «Preventing flash before hydration»)
+const themeScript = `(function(){try{var t=localStorage.getItem("theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="ru"
+      data-theme="light"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="flex min-h-full flex-col">
         <SiteHeader />
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">{children}</main>

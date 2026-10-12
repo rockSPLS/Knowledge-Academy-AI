@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
+import { Check, CircleAlert, ListChecks, X, type LucideIcon } from "lucide-react";
 import type {
   ChoiceOptionStatus,
   MultipleChoiceAnswer,
@@ -14,24 +15,28 @@ import { useExercise } from "../useExercise";
 // Если верных несколько, отметить можно не больше их числа — но само число
 // заранее не показывается. Подсказка появляется, только если упереться в лимит.
 
-// Метки разбора: значок + слово, а не только цвет. Цвета временные (до шага дизайна).
+// Метки разбора: значок + слово, а не только цвет. Цвета — из токенов итогов
+// (зелёный — верно, красный — лишний, янтарный — пропущен).
 const STATUS_MARKS: Partial<
-  Record<ChoiceOptionStatus, { icon: string; label: string; className: string }>
+  Record<ChoiceOptionStatus, { Icon: LucideIcon; label: string; box: string; text: string }>
 > = {
   correct: {
-    icon: "✓",
+    Icon: Check,
     label: "Верно",
-    className: "border-green-600/60 text-green-700 dark:text-green-400",
+    box: "border-success-border bg-success-soft",
+    text: "text-success",
   },
   wrong: {
-    icon: "✗",
+    Icon: X,
     label: "Лишний",
-    className: "border-red-600/60 text-red-700 dark:text-red-400",
+    box: "border-danger-border bg-danger-soft",
+    text: "text-danger",
   },
   missed: {
-    icon: "!",
+    Icon: CircleAlert,
     label: "Пропущен",
-    className: "border-amber-600/60 text-amber-700 dark:text-amber-400",
+    box: "border-warning-border bg-warning-soft",
+    text: "text-warning",
   },
 };
 
@@ -78,8 +83,10 @@ export function MultipleChoice({ exercise }: { exercise: PublicMultipleChoice })
 
   return (
     <ExerciseShell
-      typeLabel={isMultiple ? "Выберите все подходящие варианты" : "Выберите один ответ"}
+      typeName="Выбор ответа"
+      typeIcon={ListChecks}
       question={exercise.question}
+      instruction={isMultiple ? "Выберите все подходящие варианты" : "Выберите один ответ"}
       status={status}
       result={result}
       revealError={revealError}
@@ -101,8 +108,10 @@ export function MultipleChoice({ exercise }: { exercise: PublicMultipleChoice })
           return (
             <label
               key={option.id}
-              className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 ${
-                mark ? mark.className : "border-foreground/10 has-[:checked]:border-foreground/40"
+              className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
+                mark
+                  ? mark.box
+                  : "border-border bg-background hover:border-border-strong has-[:checked]:border-accent"
               }`}
             >
               <input
@@ -117,14 +126,16 @@ export function MultipleChoice({ exercise }: { exercise: PublicMultipleChoice })
               <span className="flex-1 text-foreground">
                 {option.text}
                 {showFeedback && (
-                  <span className="mt-1 block text-sm text-foreground/70">
+                  <span className="mt-1 block text-sm text-muted">
                     {optionReview.feedback}
                   </span>
                 )}
               </span>
               {mark && (
-                <span className="shrink-0 text-sm font-medium">
-                  <span aria-hidden="true">{mark.icon} </span>
+                <span
+                  className={`inline-flex shrink-0 items-center gap-1 text-sm font-medium ${mark.text}`}
+                >
+                  <mark.Icon size={16} aria-hidden="true" />
                   {mark.label}
                 </span>
               )}
@@ -133,7 +144,7 @@ export function MultipleChoice({ exercise }: { exercise: PublicMultipleChoice })
         })}
       </div>
       {/* Область всегда в разметке, чтобы экранный диктор озвучил появившийся текст */}
-      <p aria-live="polite" className="mt-2 text-sm text-foreground/70">
+      <p aria-live="polite" className="mt-2 text-sm text-muted">
         {isLimitHintVisible && !isLocked
           ? `Можно выбрать не больше ${exercise.maxSelections} вариантов`
           : ""}

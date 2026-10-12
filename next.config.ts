@@ -4,6 +4,11 @@ import createMDX from "@next/mdx";
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
+  // Список статей живёт на главной. Редирект временный (307): постоянный браузеры
+  // запоминают навсегда, и страницу /articles потом было бы трудно вернуть.
+  async redirects() {
+    return [{ source: "/articles", destination: "/", permanent: false }];
+  },
   turbopack: {
     rules: {
       "*.css": {
