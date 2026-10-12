@@ -55,14 +55,17 @@ export function TestSummary() {
   const { isFinished, score, total, restart } = useRequiredTest();
   if (!isFinished) return null;
 
-  // Баллы могут быть дробными, когда появится частичная правильность
-  const rounded = Math.round(score * 10) / 10;
+  // Баллы бывают дробными (частично верные ответы) — показываем с запятой: «2,6».
+  // Округляем вниз, чтобы неидеальный результат никогда не выглядел как максимальный.
+  const formattedScore = (Math.floor(score * 10) / 10).toLocaleString("ru-RU", {
+    maximumFractionDigits: 1,
+  });
 
   return (
     <section className="space-y-3 rounded-lg border border-foreground/15 p-5">
       <h2 className="text-xl font-semibold">Тест завершён</h2>
       <p>
-        Ваш результат: {rounded} из {total}
+        Ваш результат: {formattedScore} из {total}
       </p>
       <button
         type="button"

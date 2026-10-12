@@ -37,7 +37,7 @@ const exercises: Exercise[] = [
   {
     id: "hallucinations-red-flags",
     type: "multiple-choice",
-    question: "Какие признаки в ответе модели должны насторожить? Выберите все подходящие.",
+    question: "Какие признаки в ответе модели должны насторожить?",
     options: [
       { id: "a", text: "Точные даты и номера страниц о малоизвестном предмете" },
       { id: "b", text: "Ссылка, которая подозрительно идеально подтверждает вашу мысль" },
@@ -62,7 +62,12 @@ function validateBank(list: Exercise[]) {
     if (optionIds.size !== exercise.options.length) {
       throw new Error(`Банк вопросов: повторяются id вариантов в "${exercise.id}"`);
     }
-    if (exercise.correct.length === 0 || !exercise.correct.every((id) => optionIds.has(id))) {
+    // Дубли в correct недопустимы: число верных задаёт и лимит выбора, и знаменатель балла
+    if (
+      exercise.correct.length === 0 ||
+      new Set(exercise.correct).size !== exercise.correct.length ||
+      !exercise.correct.every((id) => optionIds.has(id))
+    ) {
       throw new Error(`Банк вопросов: неверный список правильных ответов в "${exercise.id}"`);
     }
   }

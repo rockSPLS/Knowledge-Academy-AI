@@ -25,8 +25,9 @@ export type PublicMultipleChoice = {
   type: "multiple-choice";
   question: string;
   options: ChoiceOption[];
-  // Подсказка интерфейсу: можно ли выбрать несколько вариантов
-  multiple: boolean;
+  // Сколько вариантов можно отметить (= число верных). 1 — обычный выбор одного ответа.
+  // Пользователю число заранее не показывается, это только ограничение интерфейса.
+  maxSelections: number;
 };
 
 export type MultipleChoiceAnswer = {
@@ -39,10 +40,13 @@ export type MultipleChoiceAnswer = {
 export type Exercise = MultipleChoiceExercise;
 export type PublicExercise = PublicMultipleChoice;
 
+// Итог проверки: верно (балл 1), частично верно (между 0 и 1), неверно (0)
+export type Verdict = "correct" | "partial" | "incorrect";
+
 // Результат проверки, одинаковый для всех типов
 export type CheckResult = {
-  // Доля правильности от 0 до 1 — позволяет учитывать частично верные ответы
+  // Доля правильно выполненных элементов ответа — от 0 до 1
   score: number;
-  isCorrect: boolean;
+  verdict: Verdict;
   explanation: string;
 };

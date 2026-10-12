@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { verdictFromScore } from "../scoring";
 import type { CheckResult, MultipleChoiceExercise, PublicMultipleChoice } from "../types";
 
 // Серверная логика упражнения «Выбор ответа»: что отдать в браузер,
@@ -10,7 +11,7 @@ export function toPublic(exercise: MultipleChoiceExercise): PublicMultipleChoice
     type: exercise.type,
     question: exercise.question,
     options: exercise.options,
-    multiple: exercise.correct.length > 1,
+    maxSelections: exercise.correct.length,
   };
 }
 
@@ -19,25 +20,24 @@ export const answerSchema = z.object({
   selected: z.array(z.string().max(32)).min(1).max(20),
 });
 
-// Возвращает null, если в ответе есть варианты, которых нет в упражнении
+// Правило оценки: отметить можно не больше вариантов, чем верных (N), поэтому
+// «выбрать всё» невозможно и штрафы не нужны. Балл = найдено верных / N.
+// Возвращает null, если ответ нарушает правила: неизвестные варианты или больше N отметок.
 export function check(
   exercise: MultipleChoiceExercise,
   answer: z.infer<typeof answerSchema>,
 ): CheckResult | null {
   const optionIds = new Set(exercise.options.map((option) => option.id));
-  if (!answer.selected.every((id) => optionIds.has(id))) return null;
-
   const selected = new Set(answer.selected);
-  const correct = new Set(exercise.correct);
-  const isCorrect =
-    selected.size === correct.size && [...selected].every((id) => correct.has(id));
+  if (![...selected].every((id) => optionIds.has(id))) return null;
+  if (selected.size > exercise.correct.length) return null;
 
-  // Пока засчитывается только полностью верный ответ.
-  // Правило для частично верных ответов (когда правильных вариантов несколько)
-  // ещё предстоит выбрать.
+  const found = exercise.correct.filter((id) => selected.has(id)).length;
+  const score = found / exercise.correct.length;
+
   return {
-    score: isCorrect ? 1 : 0,
-    isCorrect,
+    score,
+    verdict: verdictFromScore(score),
     explanation: exercise.explanation,
   };
 }

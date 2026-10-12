@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { CheckResult } from "@/lib/exercises/types";
+import type { CheckResult, Verdict } from "@/lib/exercises/types";
 import type { ExerciseMode, ExerciseStatus } from "./useExercise";
+
+const VERDICT_LABELS: Record<Verdict, string> = {
+  correct: "Верно",
+  partial: "Частично верно",
+  incorrect: "Неверно",
+};
 
 // Общая оболочка для всех типов упражнений: метка типа, вопрос, кнопка
 // проверки и блок результата. Поле для ответа передаётся через children —
@@ -78,7 +84,7 @@ export function ExerciseShell({
         {/* Временный вид результата — оформление обратной связи ещё предстоит выбрать */}
         {isChecked && result && (
           <div ref={resultRef} tabIndex={-1} className="space-y-2 text-sm outline-none">
-            <p className="font-medium">{result.isCorrect ? "Верно" : "Неверно"}</p>
+            <p className="font-medium">{VERDICT_LABELS[result.verdict]}</p>
             <p className="text-foreground/70">{result.explanation}</p>
             {mode === "inline" && (
               <button type="button" onClick={onRetry} className="underline underline-offset-4">

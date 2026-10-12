@@ -13,7 +13,7 @@ export function toPublicExercise(exercise: Exercise): PublicExercise {
 }
 
 // Возвращает null, если ответ не подходит для этого упражнения
-// (неверный формат или варианты, которых в упражнении нет)
+// (неверный формат, варианты, которых в упражнении нет, или отмечено больше вариантов, чем верных)
 export function checkAnswer(exercise: Exercise, answer: unknown): CheckResult | null {
   switch (exercise.type) {
     case "multiple-choice": {
