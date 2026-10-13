@@ -125,12 +125,66 @@ export type FillBlankReview = {
   blanks: Record<string, { isCorrect: boolean; expected: string; feedback?: string }>;
 };
 
+// ---------- Соедините пары ----------
+
+// Термин в банке: может иметь приватное пояснение — показывается, если пара соединена неверно
+export type MatchPairsTerm = {
+  id: string;
+  text: string;
+  feedback?: string;
+};
+
+export type MatchPairsExercise = {
+  id: string;
+  type: "match-pairs";
+  question: string;
+  // От 3 до 6 пар (обычно 3–4)
+  terms: MatchPairsTerm[];
+  // Порядок определений задаёт автор — так они и лежат в стопке.
+  // Он не должен полностью совпадать с порядком терминов (проверяется при запуске).
+  definitions: { id: string; text: string }[];
+  // Приватно: id термина → id его определения
+  correct: Record<string, string>;
+  explanation: string;
+};
+
+export type PublicMatchPairs = {
+  id: string;
+  type: "match-pairs";
+  question: string;
+  terms: { id: string; text: string }[];
+  definitions: { id: string; text: string }[];
+};
+
+// Какое определение пользователь поставил к каждому термину: id термина → id определения
+export type MatchPairsAnswer = {
+  matches: Record<string, string>;
+};
+
+export type MatchPairsReview = {
+  type: "match-pairs";
+  // expected — id правильного определения; feedback — у неверно соединённых пар
+  terms: Record<string, { isCorrect: boolean; expected: string; feedback?: string }>;
+};
+
 // ---------- Общие типы ----------
 
 // По мере добавления типов сюда дописываются новые варианты через `|`
-export type Exercise = MultipleChoiceExercise | TrueFalseExercise | FillBlankExercise;
-export type PublicExercise = PublicMultipleChoice | PublicTrueFalse | PublicFillBlank;
-export type ExerciseReviewDetails = MultipleChoiceReview | TrueFalseReview | FillBlankReview;
+export type Exercise =
+  | MultipleChoiceExercise
+  | TrueFalseExercise
+  | FillBlankExercise
+  | MatchPairsExercise;
+export type PublicExercise =
+  | PublicMultipleChoice
+  | PublicTrueFalse
+  | PublicFillBlank
+  | PublicMatchPairs;
+export type ExerciseReviewDetails =
+  | MultipleChoiceReview
+  | TrueFalseReview
+  | FillBlankReview
+  | MatchPairsReview;
 
 // Итог проверки: верно (балл 1), частично верно (между 0 и 1), неверно (0)
 export type Verdict = "correct" | "partial" | "incorrect";

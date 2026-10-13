@@ -3,6 +3,7 @@ import type { CheckResult, Exercise, PublicExercise } from "./types";
 import * as multipleChoice from "./handlers/multipleChoice";
 import * as trueFalse from "./handlers/trueFalse";
 import * as fillBlank from "./handlers/fillBlank";
+import * as matchPairs from "./handlers/matchPairs";
 
 // Единая точка серверной работы с упражнениями. Каждый тип описан своим
 // обработчиком в handlers/, здесь они только выбираются по полю `type`.
@@ -16,6 +17,8 @@ export function toPublicExercise(exercise: Exercise): PublicExercise {
       return trueFalse.toPublic(exercise);
     case "fill-blank":
       return fillBlank.toPublic(exercise);
+    case "match-pairs":
+      return matchPairs.toPublic(exercise);
   }
 }
 
@@ -28,6 +31,8 @@ export function validateExercise(exercise: Exercise): string | null {
       return trueFalse.validate(exercise);
     case "fill-blank":
       return fillBlank.validate(exercise);
+    case "match-pairs":
+      return matchPairs.validate(exercise);
   }
 }
 
@@ -62,6 +67,10 @@ function evaluate(exercise: Exercise, answer: unknown): CheckResult | null {
     case "fill-blank": {
       const parsed = fillBlank.answerSchema.safeParse(answer);
       return parsed.success ? fillBlank.check(exercise, parsed.data) : null;
+    }
+    case "match-pairs": {
+      const parsed = matchPairs.answerSchema.safeParse(answer);
+      return parsed.success ? matchPairs.check(exercise, parsed.data) : null;
     }
   }
 }
