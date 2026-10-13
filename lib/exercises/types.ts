@@ -167,6 +167,46 @@ export type MatchPairsReview = {
   terms: Record<string, { isCorrect: boolean; expected: string; feedback?: string }>;
 };
 
+// ---------- Расставьте шаги ----------
+
+// Шаг в банке: может иметь приватное пояснение — показывается, если шаг стоит не на месте
+export type OrderStep = {
+  id: string;
+  text: string;
+  feedback?: string;
+};
+
+export type OrderStepsExercise = {
+  id: string;
+  type: "order-steps";
+  question: string;
+  // От 3 до 6 шагов — в том порядке, в каком их видит пользователь.
+  // Этот порядок не должен совпадать с верным (проверяется при запуске).
+  steps: OrderStep[];
+  // Приватно: id шагов в верном порядке
+  correct: string[];
+  explanation: string;
+};
+
+export type PublicOrderSteps = {
+  id: string;
+  type: "order-steps";
+  question: string;
+  steps: { id: string; text: string }[];
+};
+
+// Порядок, в котором пользователь расставил шаги (id всех шагов)
+export type OrderStepsAnswer = {
+  order: string[];
+};
+
+export type OrderStepsReview = {
+  type: "order-steps";
+  // isCorrect — шаг стоит в верном порядке относительно других (его не нужно переставлять);
+  // position — номер шага в верном порядке (с 1); feedback — у шагов, которые нужно переставить
+  steps: Record<string, { isCorrect: boolean; position: number; feedback?: string }>;
+};
+
 // ---------- Общие типы ----------
 
 // По мере добавления типов сюда дописываются новые варианты через `|`
@@ -174,17 +214,20 @@ export type Exercise =
   | MultipleChoiceExercise
   | TrueFalseExercise
   | FillBlankExercise
-  | MatchPairsExercise;
+  | MatchPairsExercise
+  | OrderStepsExercise;
 export type PublicExercise =
   | PublicMultipleChoice
   | PublicTrueFalse
   | PublicFillBlank
-  | PublicMatchPairs;
+  | PublicMatchPairs
+  | PublicOrderSteps;
 export type ExerciseReviewDetails =
   | MultipleChoiceReview
   | TrueFalseReview
   | FillBlankReview
-  | MatchPairsReview;
+  | MatchPairsReview
+  | OrderStepsReview;
 
 // Итог проверки: верно (балл 1), частично верно (между 0 и 1), неверно (0)
 export type Verdict = "correct" | "partial" | "incorrect";

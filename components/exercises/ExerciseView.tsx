@@ -4,6 +4,7 @@ import type { PublicExercise } from "@/lib/exercises/types";
 import { FillBlank } from "./types/FillBlank";
 import { MatchPairs } from "./types/MatchPairs";
 import { MultipleChoice } from "./types/MultipleChoice";
+import { OrderSteps } from "./types/OrderSteps";
 import { TrueFalse } from "./types/TrueFalse";
 
 // Выбирает компонент по типу упражнения. Новый тип — новая ветка здесь.
@@ -20,5 +21,7 @@ export function ExerciseView({ exercise }: { exercise: PublicExercise }): React.
       return <FillBlank exercise={exercise} />;
     case "match-pairs":
       return <MatchPairs exercise={exercise} />;
+    case "order-steps":
+      return <OrderSteps exercise={exercise} />;
   }
 }

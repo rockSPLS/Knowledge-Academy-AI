@@ -4,6 +4,7 @@ import * as multipleChoice from "./handlers/multipleChoice";
 import * as trueFalse from "./handlers/trueFalse";
 import * as fillBlank from "./handlers/fillBlank";
 import * as matchPairs from "./handlers/matchPairs";
+import * as orderSteps from "./handlers/orderSteps";
 
 // Единая точка серверной работы с упражнениями. Каждый тип описан своим
 // обработчиком в handlers/, здесь они только выбираются по полю `type`.
@@ -19,6 +20,8 @@ export function toPublicExercise(exercise: Exercise): PublicExercise {
       return fillBlank.toPublic(exercise);
     case "match-pairs":
       return matchPairs.toPublic(exercise);
+    case "order-steps":
+      return orderSteps.toPublic(exercise);
   }
 }
 
@@ -33,6 +36,8 @@ export function validateExercise(exercise: Exercise): string | null {
       return fillBlank.validate(exercise);
     case "match-pairs":
       return matchPairs.validate(exercise);
+    case "order-steps":
+      return orderSteps.validate(exercise);
   }
 }
 
@@ -71,6 +76,10 @@ function evaluate(exercise: Exercise, answer: unknown): CheckResult | null {
     case "match-pairs": {
       const parsed = matchPairs.answerSchema.safeParse(answer);
       return parsed.success ? matchPairs.check(exercise, parsed.data) : null;
+    }
+    case "order-steps": {
+      const parsed = orderSteps.answerSchema.safeParse(answer);
+      return parsed.success ? orderSteps.check(exercise, parsed.data) : null;
     }
   }
 }
