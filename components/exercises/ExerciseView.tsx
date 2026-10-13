@@ -1,7 +1,9 @@
 "use client";
 
 import type { PublicExercise } from "@/lib/exercises/types";
+import { FillBlank } from "./types/FillBlank";
 import { MultipleChoice } from "./types/MultipleChoice";
+import { TrueFalse } from "./types/TrueFalse";
 
 // Выбирает компонент по типу упражнения. Новый тип — новая ветка здесь.
 // Явный тип возврата нужен, чтобы TypeScript ругался, если для нового типа
@@ -11,5 +13,9 @@ export function ExerciseView({ exercise }: { exercise: PublicExercise }): React.
   switch (exercise.type) {
     case "multiple-choice":
       return <MultipleChoice exercise={exercise} />;
+    case "true-false":
+      return <TrueFalse exercise={exercise} />;
+    case "fill-blank":
+      return <FillBlank exercise={exercise} />;
   }
 }

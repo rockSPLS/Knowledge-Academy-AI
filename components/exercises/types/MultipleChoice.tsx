@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
-import { Check, CircleAlert, ListChecks, X, type LucideIcon } from "lucide-react";
+import { ListChecks } from "lucide-react";
 import type {
   ChoiceOptionStatus,
   MultipleChoiceAnswer,
@@ -9,35 +9,19 @@ import type {
   PublicMultipleChoice,
 } from "@/lib/exercises/types";
 import { ExerciseShell } from "../ExerciseShell";
+import { REVIEW_MARKS, type ReviewMark } from "../reviewMarks";
 import { useExercise } from "../useExercise";
 
 // Упражнение «Выбор ответа»: один или несколько правильных вариантов.
 // Если верных несколько, отметить можно не больше их числа — но само число
 // заранее не показывается. Подсказка появляется, только если упереться в лимит.
 
-// Метки разбора: значок + слово, а не только цвет. Цвета — из токенов итогов
-// (зелёный — верно, красный — лишний, янтарный — пропущен).
-const STATUS_MARKS: Partial<
-  Record<ChoiceOptionStatus, { Icon: LucideIcon; label: string; box: string; text: string }>
-> = {
-  correct: {
-    Icon: Check,
-    label: "Верно",
-    box: "border-success-border bg-success-soft",
-    text: "text-success",
-  },
-  wrong: {
-    Icon: X,
-    label: "Лишний",
-    box: "border-danger-border bg-danger-soft",
-    text: "text-danger",
-  },
-  missed: {
-    Icon: CircleAlert,
-    label: "Пропущен",
-    box: "border-warning-border bg-warning-soft",
-    text: "text-warning",
-  },
+// Отметки разбора: общий стиль (reviewMarks) + подпись, своя для этого типа.
+// Неотмеченные неверные варианты остаются без отметки.
+const STATUS_MARKS: Partial<Record<ChoiceOptionStatus, ReviewMark & { label: string }>> = {
+  correct: { ...REVIEW_MARKS.correct, label: "Верно" },
+  wrong: { ...REVIEW_MARKS.wrong, label: "Лишний" },
+  missed: { ...REVIEW_MARKS.missed, label: "Пропущен" },
 };
 
 export function MultipleChoice({ exercise }: { exercise: PublicMultipleChoice }) {
@@ -45,6 +29,8 @@ export function MultipleChoice({ exercise }: { exercise: PublicMultipleChoice })
     useExercise<MultipleChoiceAnswer>(exercise.id);
   const [selected, setSelected] = useState<string[]>([]);
   const [isLimitHintVisible, setLimitHintVisible] = useState(false);
+  // Пользователь пытался проверить, ничего не выбрав
+  const [showMissing, setShowMissing] = useState(false);
   // Уникальное имя группы, даже если одно упражнение встречается на странице дважды
   const groupName = useId();
   const firstOptionRef = useRef<HTMLInputElement>(null);
@@ -73,7 +59,17 @@ export function MultipleChoice({ exercise }: { exercise: PublicMultipleChoice })
     }
   }
 
+  function handleSubmit() {
+    if (selected.length === 0) {
+      setShowMissing(true);
+      firstOptionRef.current?.focus();
+      return;
+    }
+    submit({ selected });
+  }
+
   function retry() {
+    setShowMissing(false);
     setSelected([]);
     setLimitHintVisible(false);
     reset();
@@ -91,12 +87,19 @@ export function MultipleChoice({ exercise }: { exercise: PublicMultipleChoice })
       result={result}
       revealError={revealError}
       mode={mode}
-      canSubmit={selected.length > 0}
-      onSubmit={() => submit({ selected })}
+      validationMessage={
+        showMissing && selected.length === 0 ? "Выберите хотя бы один вариант" : null
+      }
+      onSubmit={handleSubmit}
       onRetry={retry}
       onReveal={revealAnswer}
     >
-      <div className="space-y-2">
+      {/* Если пытались проверить без выбора — подсвечиваем весь список вариантов */}
+      <div
+        className={`space-y-2 rounded-lg ${
+          showMissing && selected.length === 0 ? "ring-1 ring-accent ring-offset-4 ring-offset-surface" : ""
+        }`}
+      >
         {exercise.options.map((option, index) => {
           const optionReview = review?.options[option.id];
           const mark = optionReview ? STATUS_MARKS[optionReview.status] : undefined;

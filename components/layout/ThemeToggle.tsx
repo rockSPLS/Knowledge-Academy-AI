@@ -20,6 +20,22 @@ function subscribe(onChange: () => void) {
   return () => observer.disconnect();
 }
 
+// Меняет тему одновременно для всех элементов: на время смены отключаются
+// собственные плавные переходы цвета у карточек и кнопок, иначе они «догоняют» фон
+function applyTheme(theme: Theme) {
+  const root = document.documentElement;
+  root.dataset.themeSwitching = "";
+  root.dataset.theme = theme;
+  // Принудительный пересчёт стилей, чтобы новые цвета применились без переходов
+  void root.offsetHeight;
+  delete root.dataset.themeSwitching;
+  try {
+    localStorage.setItem("theme", theme);
+  } catch {
+    // localStorage может быть недоступен (приватный режим) — тема просто не запомнится
+  }
+}
+
 export function ThemeToggle() {
   // На сервере темы пользователя не знаем — считаем светлой (как в разметке по умолчанию)
   const theme = useSyncExternalStore(subscribe, readTheme, (): Theme => "light");
@@ -39,11 +55,15 @@ export function ThemeToggle() {
 
   function toggle() {
     const next: Theme = isDark ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
-    try {
-      localStorage.setItem("theme", next);
-    } catch {
-      // localStorage может быть недоступен (приватный режим) — тема просто не запомнится
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    // Плавное затемнение/осветление всей страницы целиком (View Transitions API):
+    // браузер растворяет «снимок» старой темы в новую. Если браузер этого не умеет
+    // или пользователь просил уменьшить движение — тема меняется мгновенно, но тоже целиком.
+    if ("startViewTransition" in document && !prefersReducedMotion) {
+      document.startViewTransition(() => applyTheme(next));
+    } else {
+      applyTheme(next);
     }
   }
 

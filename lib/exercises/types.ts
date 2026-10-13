@@ -1,5 +1,7 @@
 // Типы упражнений. У каждого упражнения есть публичная часть (уходит в браузер)
 // и приватная (правильный ответ и объяснение — остаются только на сервере).
+// Все id (упражнений, вариантов, утверждений, пропусков) публичны — они не должны
+// подсказывать ответ (не "correct-option", а "a", "facts-db", "unit").
 
 // ---------- Выбор ответа ----------
 
@@ -51,12 +53,84 @@ export type MultipleChoiceReview = {
   options: Record<string, { status: ChoiceOptionStatus; feedback?: string }>;
 };
 
+// ---------- Верно или неверно ----------
+
+// Утверждение в банке: правильная оценка и объяснение — приватные
+export type TrueFalseStatement = {
+  id: string;
+  text: string;
+  isTrue: boolean;
+  explanation: string;
+};
+
+export type TrueFalseExercise = {
+  id: string;
+  type: "true-false";
+  question: string;
+  // От 1 до 5 утверждений
+  statements: TrueFalseStatement[];
+  // Общий вывод по всем утверждениям
+  explanation: string;
+};
+
+export type PublicTrueFalse = {
+  id: string;
+  type: "true-false";
+  question: string;
+  statements: { id: string; text: string }[];
+};
+
+// Оценка пользователя по каждому утверждению: true — «верно», false — «неверно»
+export type TrueFalseAnswer = {
+  answers: Record<string, boolean>;
+};
+
+export type TrueFalseReview = {
+  type: "true-false";
+  // isCorrect — верно ли пользователь оценил утверждение; объяснение — у ошибочно оценённых
+  statements: Record<string, { isCorrect: boolean; isTrue: boolean; explanation?: string }>;
+};
+
+// ---------- Заполните пропуски ----------
+
+// Текст с пропусками: пропуск обозначается как [[id]], например
+// «Модель работает не с буквами, а с [[unit]] — кусочками текста».
+export type FillBlankExercise = {
+  id: string;
+  type: "fill-blank";
+  question: string;
+  text: string;
+  // Допустимые ответы для каждого пропуска (формы слова, синонимы) — приватно
+  blanks: Record<string, { accepted: string[]; feedback?: string }>;
+  explanation: string;
+};
+
+// Текст, разбитый на куски: обычный текст и места для пропусков (без ответов)
+export type FillBlankPart = { type: "text"; value: string } | { type: "blank"; id: string };
+
+export type PublicFillBlank = {
+  id: string;
+  type: "fill-blank";
+  question: string;
+  parts: FillBlankPart[];
+};
+
+export type FillBlankAnswer = {
+  blanks: Record<string, string>;
+};
+
+export type FillBlankReview = {
+  type: "fill-blank";
+  // expected — эталонный ответ (первый из допустимых); feedback — у неверно заполненных
+  blanks: Record<string, { isCorrect: boolean; expected: string; feedback?: string }>;
+};
+
 // ---------- Общие типы ----------
 
 // По мере добавления типов сюда дописываются новые варианты через `|`
-export type Exercise = MultipleChoiceExercise;
-export type PublicExercise = PublicMultipleChoice;
-export type ExerciseReviewDetails = MultipleChoiceReview;
+export type Exercise = MultipleChoiceExercise | TrueFalseExercise | FillBlankExercise;
+export type PublicExercise = PublicMultipleChoice | PublicTrueFalse | PublicFillBlank;
+export type ExerciseReviewDetails = MultipleChoiceReview | TrueFalseReview | FillBlankReview;
 
 // Итог проверки: верно (балл 1), частично верно (между 0 и 1), неверно (0)
 export type Verdict = "correct" | "partial" | "incorrect";
@@ -76,6 +150,9 @@ export type CheckResult<D extends ExerciseReviewDetails = ExerciseReviewDetails>
   verdict: Verdict;
   // Подсказка, которая помогает найти ошибку, но не раскрывает ответ
   hint?: string;
+  // Подсказка, полезная только для новой попытки (например, «проверьте написание»);
+  // после раскрытия ответа не показывается
+  retryHint?: string;
   // Раскрытие ответа. Сервер присылает его, только если ответ верный,
   // если пользователь попросил показать ответ или если это тест.
   review?: ExerciseReview<D>;

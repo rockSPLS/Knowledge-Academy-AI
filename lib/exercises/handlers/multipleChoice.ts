@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_ANSWER_ITEMS, MAX_ID_LENGTH, validateItemIds } from "../limits";
 import { verdictFromScore } from "../scoring";
 import type {
   ChoiceOptionStatus,
@@ -24,8 +25,27 @@ export function toPublic(exercise: MultipleChoiceExercise): PublicMultipleChoice
 
 export const answerSchema = z.object({
   // Ограничения размера защищают сервер от заведомо мусорных запросов
-  selected: z.array(z.string().max(32)).min(1).max(20),
+  selected: z.array(z.string().max(MAX_ID_LENGTH)).min(1).max(MAX_ANSWER_ITEMS),
 });
+
+// Проверка целостности упражнения в банке; возвращает текст ошибки или null
+export function validate(exercise: MultipleChoiceExercise): string | null {
+  const idsError = validateItemIds(
+    exercise.options.map((option) => option.id),
+    "вариантов",
+  );
+  if (idsError) return idsError;
+  const optionIds = new Set(exercise.options.map((option) => option.id));
+  // Дубли в correct недопустимы: число верных задаёт и лимит выбора, и знаменатель балла
+  if (
+    exercise.correct.length === 0 ||
+    new Set(exercise.correct).size !== exercise.correct.length ||
+    !exercise.correct.every((id) => optionIds.has(id))
+  ) {
+    return "неверный список правильных ответов";
+  }
+  return null;
+}
 
 // Правило оценки: отметить можно не больше вариантов, чем верных (N), поэтому
 // «выбрать всё» невозможно и штрафы не нужны. Балл = найдено верных / N.

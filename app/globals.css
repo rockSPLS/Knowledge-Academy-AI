@@ -5,7 +5,7 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* Дизайн-токены: все цвета сайта задаются здесь, компоненты ссылаются
-   на них через утилиты Tailwind (bg-surface, text-muted, bg-accent...).
+   на них через утилиты Tailwind (bg-surface, text-muted, bg-accent-fill...).
    Светлая тема — по умолчанию. */
 :root,
 [data-theme="light"] {
@@ -19,10 +19,13 @@
   --border: #e4e4e7;
   --border-strong: #d4d4d8;
 
-  /* Акцент — индиго: главные кнопки, ссылки, метки типов упражнений */
+  /* Акцент — индиго. accent — ссылки, значки, рамки и обводки;
+     accent-fill — заливка главных кнопок и полосы прогресса, текст на ней — accent-fill-foreground */
   --accent: #4f46e5;
   --accent-hover: #4338ca;
-  --accent-foreground: #ffffff;
+  --accent-fill: #4f46e5;
+  --accent-fill-hover: #4338ca;
+  --accent-fill-foreground: #ffffff;
   --accent-soft: #eef2ff;
   --accent-soft-foreground: #3730a3;
 
@@ -50,9 +53,14 @@
   --border: #27272a;
   --border-strong: #3f3f46;
 
+  /* Ссылки и значки — светлый индиго (читается на тёмном фоне),
+     кнопки — насыщенный индиго с белым текстом */
   --accent: #818cf8;
   --accent-hover: #a5b4fc;
-  --accent-foreground: #0b0b14;
+  --accent-fill: #4f46e5;
+  /* При наведении в тёмной теме кнопка светлеет (на тёмном фоне затемнение выглядело бы как «погасла») */
+  --accent-fill-hover: #6159ee;
+  --accent-fill-foreground: #ffffff;
   --accent-soft: #1e1b4b;
   --accent-soft-foreground: #c7d2fe;
 
@@ -77,7 +85,9 @@
   --color-border-strong: var(--border-strong);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
-  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-fill: var(--accent-fill);
+  --color-accent-fill-hover: var(--accent-fill-hover);
+  --color-accent-fill-foreground: var(--accent-fill-foreground);
   --color-accent-soft: var(--accent-soft);
   --color-accent-soft-foreground: var(--accent-soft-foreground);
   --color-success: var(--success);
@@ -96,6 +106,25 @@
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+/* Смена темы: в момент переключения у элементов отключаются собственные переходы цвета,
+   а вся страница плавно растворяется из старой темы в новую (components/layout/ThemeToggle.tsx) */
+[data-theme-switching] *,
+[data-theme-switching] *::before,
+[data-theme-switching] *::after {
+  transition: none !important;
+}
+
+/* Во время растворения клики проходят на страницу, а не теряются на «снимке» */
+::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 300ms;
+  animation-timing-function: ease;
 }
 
 /* Базовые стили — в слое base, чтобы утилиты Tailwind могли их переопределить */

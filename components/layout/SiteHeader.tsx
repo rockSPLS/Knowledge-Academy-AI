@@ -15,7 +15,7 @@ export function SiteHeader() {
         <div className="flex items-center gap-2">
           <NavLink
             href="/test"
-            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover"
+            className="rounded-md bg-accent-fill px-3 py-1.5 text-sm font-medium text-accent-fill-foreground transition-colors hover:bg-accent-fill-hover"
           >
             Пройти тест
           </NavLink>

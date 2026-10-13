@@ -38,7 +38,7 @@ export function TestProgress() {
         aria-valuemin={0}
         aria-valuemax={total}
       >
-        <div className="h-full bg-accent transition-all" style={{ width: `${percent}%` }} />
+        <div className="h-full bg-accent-fill transition-all" style={{ width: `${percent}%` }} />
       </div>
     </div>
   );
@@ -75,7 +75,7 @@ export function TestSummary() {
           window.scrollTo({ top: 0 });
           document.getElementById(TEST_START_ID)?.focus({ preventScroll: true });
         }}
-        className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover"
+        className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-accent-fill-foreground transition-colors hover:bg-accent-fill-hover"
       >
         Пройти заново
       </button>

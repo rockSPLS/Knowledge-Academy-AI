@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CircleCheck, CircleMinus, CircleX, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { CheckResult, Verdict } from "@/lib/exercises/types";
 import type { ExerciseMode, ExerciseStatus } from "./useExercise";
@@ -38,7 +38,9 @@ type ExerciseShellProps = {
   result: CheckResult | null;
   revealError: boolean;
   mode: ExerciseMode;
-  canSubmit: boolean;
+  // Сообщение, если ответ заполнен не полностью (тип показывает его после попытки проверить).
+  // Кнопка «Проверить» не блокируется: по клику видно, чего не хватает.
+  validationMessage: string | null;
   onSubmit: () => void;
   onRetry: () => void;
   onReveal: () => void;
@@ -54,7 +56,7 @@ export function ExerciseShell({
   result,
   revealError,
   mode,
-  canSubmit,
+  validationMessage,
   onSubmit,
   onRetry,
   onReveal,
@@ -65,6 +67,9 @@ export function ExerciseShell({
   const isRevealing = status === "revealing";
   const resultRef = useRef<HTMLDivElement>(null);
   const revealErrorRef = useRef<HTMLParagraphElement>(null);
+  // Номер попытки проверить: сообщение о незаполненном пересоздаётся при каждом клике,
+  // чтобы экранный диктор озвучивал его снова, даже если текст не изменился
+  const [submitAttempt, setSubmitAttempt] = useState(0);
 
   // Кнопки исчезают и появляются — переводим фокус на результат после проверки
   // и после раскрытия ответа, чтобы клавиатура и экранный диктор не «потерялись».
@@ -102,14 +107,23 @@ export function ExerciseShell({
           <button
             type="button"
             onClick={() => {
-              if (!isChecking) onSubmit();
+              if (isChecking) return;
+              setSubmitAttempt((n) => n + 1);
+              onSubmit();
             }}
-            disabled={!canSubmit}
             aria-disabled={isChecking}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover disabled:opacity-40 aria-disabled:opacity-60"
+            className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-accent-fill-foreground transition-colors hover:bg-accent-fill-hover aria-disabled:opacity-60"
           >
             {isChecking ? "Проверяю…" : "Проверить"}
           </button>
+        )}
+
+        {/* Нейтральное оформление: красный и янтарный закреплены за итогами */}
+        {validationMessage && !isAnswered && (
+          <p key={submitAttempt} role="alert" className="inline-flex items-center gap-1.5 text-sm">
+            <TriangleAlert size={16} aria-hidden="true" className="text-accent" />
+            {validationMessage}
+          </p>
         )}
 
         {status === "error" && (
@@ -129,6 +143,7 @@ export function ExerciseShell({
               </p>
             </div>
             {result.hint && <p>{result.hint}</p>}
+            {result.retryHint && !result.review && <p>{result.retryHint}</p>}
             {result.review && (
               <>
                 <p className="text-muted">{result.review.explanation}</p>

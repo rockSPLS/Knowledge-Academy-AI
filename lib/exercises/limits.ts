@@ -1,0 +1,18 @@
+// Общие ограничения размеров для упражнений. Используются и в схемах запросов
+// (защита сервера от мусорных данных), и в проверке банка при запуске —
+// чтобы упражнение с слишком длинным id не оказалось нерешаемым.
+
+// Максимальная длина id варианта, утверждения или пропуска
+export const MAX_ID_LENGTH = 32;
+
+// Максимальное число элементов в одном ответе
+export const MAX_ANSWER_ITEMS = 20;
+
+// Проверка id элемента упражнения для банка; возвращает текст ошибки или null
+export function validateItemIds(ids: string[], what: string): string | null {
+  if (ids.some((id) => id.length === 0 || id.length > MAX_ID_LENGTH)) {
+    return `id ${what} должны быть непустыми и не длиннее ${MAX_ID_LENGTH} символов`;
+  }
+  if (new Set(ids).size !== ids.length) return `повторяются id ${what}`;
+  return null;
+}
