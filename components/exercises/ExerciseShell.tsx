@@ -31,7 +31,7 @@ const REVEAL_BUTTON = `${SECONDARY_BUTTON} border-border-strong bg-background ho
 type ExerciseShellProps = {
   typeName: string;
   typeIcon: LucideIcon;
-  // Необязательная метка рядом с типом, например «★ Задача со звёздочкой» у итогового упражнения
+  // Необязательная метка в строке типа (справа), например «★ Задача со звёздочкой» у итогового упражнения
   badge?: { label: string; Icon: LucideIcon };
   question: string;
   // Что нужно сделать, например «Выберите один ответ»
@@ -99,7 +99,9 @@ export function ExerciseShell({
       {/* fieldset + legend связывают варианты ответа с вопросом для экранных дикторов */}
       <fieldset>
         <legend className="w-full">
-          <span className="flex flex-wrap gap-2">
+          {/* Тип — слева, метка сложности — справа, чтобы её не принимали за часть названия
+              типа; на узком экране метка переносится на следующую строку */}
+          <span className="flex flex-wrap justify-between gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-md bg-accent-soft px-2 py-1 text-xs font-medium text-accent-soft-foreground">
               <TypeIcon size={14} aria-hidden="true" />
               {typeName}
