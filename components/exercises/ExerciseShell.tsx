@@ -31,6 +31,8 @@ const REVEAL_BUTTON = `${SECONDARY_BUTTON} border-border-strong bg-background ho
 type ExerciseShellProps = {
   typeName: string;
   typeIcon: LucideIcon;
+  // Необязательная метка рядом с типом, например «★ Задача со звёздочкой» у итогового упражнения
+  badge?: { label: string; Icon: LucideIcon };
   question: string;
   // Что нужно сделать, например «Выберите один ответ»
   instruction: string;
@@ -50,6 +52,7 @@ type ExerciseShellProps = {
 export function ExerciseShell({
   typeName,
   typeIcon: TypeIcon,
+  badge,
   question,
   instruction,
   status,
@@ -92,9 +95,17 @@ export function ExerciseShell({
       {/* fieldset + legend связывают варианты ответа с вопросом для экранных дикторов */}
       <fieldset>
         <legend className="w-full">
-          <span className="inline-flex items-center gap-1.5 rounded-md bg-accent-soft px-2 py-1 text-xs font-medium text-accent-soft-foreground">
-            <TypeIcon size={14} aria-hidden="true" />
-            {typeName}
+          <span className="flex flex-wrap gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-accent-soft px-2 py-1 text-xs font-medium text-accent-soft-foreground">
+              <TypeIcon size={14} aria-hidden="true" />
+              {typeName}
+            </span>
+            {badge && (
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-accent px-2 py-1 text-xs font-medium text-accent">
+                <badge.Icon size={14} aria-hidden="true" />
+                {badge.label}
+              </span>
+            )}
           </span>
           <span className="mt-4 block font-semibold">{question}</span>
           <span className="mt-1 block text-sm text-muted">{instruction}</span>

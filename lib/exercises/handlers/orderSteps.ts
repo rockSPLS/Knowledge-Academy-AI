@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { plural } from "../../plural";
 import { MAX_ANSWER_ITEMS, MAX_ID_LENGTH, validateItemIds } from "../limits";
 import { verdictFromScore } from "../scoring";
 import type {
@@ -80,7 +81,9 @@ export function check(
     // Называет только число перестановок, но не сами шаги. Формулировка нейтральная:
     // до раскрытия ответа это подсказка, после — итог, совпадающий с отметками у шагов
     hint:
-      verdict === "correct" ? undefined : `Нужно переставить ${moves} ${pluralSteps(moves)}.`,
+      verdict === "correct"
+        ? undefined
+        : `Нужно переставить ${moves} ${plural(moves, ["шаг", "шага", "шагов"])}.`,
     review: {
       explanation: exercise.explanation,
       details: { type: "order-steps", steps },
@@ -116,13 +119,4 @@ function longestIncreasingIndices(values: number[]): Set<number> {
   const result = new Set<number>();
   for (let i = best; i !== -1; i = previous[i]) result.add(i);
   return result;
-}
-
-// «1 шаг», «2 шага», «5 шагов»
-function pluralSteps(count: number): string {
-  const lastTwo = count % 100;
-  const last = count % 10;
-  if (last === 1 && lastTwo !== 11) return "шаг";
-  if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return "шага";
-  return "шагов";
 }

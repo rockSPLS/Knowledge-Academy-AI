@@ -5,6 +5,7 @@ import * as trueFalse from "./handlers/trueFalse";
 import * as fillBlank from "./handlers/fillBlank";
 import * as matchPairs from "./handlers/matchPairs";
 import * as orderSteps from "./handlers/orderSteps";
+import * as costedSelect from "./handlers/costedSelect";
 
 // Единая точка серверной работы с упражнениями. Каждый тип описан своим
 // обработчиком в handlers/, здесь они только выбираются по полю `type`.
@@ -22,6 +23,8 @@ export function toPublicExercise(exercise: Exercise): PublicExercise {
       return matchPairs.toPublic(exercise);
     case "order-steps":
       return orderSteps.toPublic(exercise);
+    case "costed-select":
+      return costedSelect.toPublic(exercise);
   }
 }
 
@@ -38,6 +41,8 @@ export function validateExercise(exercise: Exercise): string | null {
       return matchPairs.validate(exercise);
     case "order-steps":
       return orderSteps.validate(exercise);
+    case "costed-select":
+      return costedSelect.validate(exercise);
   }
 }
 
@@ -80,6 +85,10 @@ function evaluate(exercise: Exercise, answer: unknown): CheckResult | null {
     case "order-steps": {
       const parsed = orderSteps.answerSchema.safeParse(answer);
       return parsed.success ? orderSteps.check(exercise, parsed.data) : null;
+    }
+    case "costed-select": {
+      const parsed = costedSelect.answerSchema.safeParse(answer);
+      return parsed.success ? costedSelect.check(exercise, parsed.data) : null;
     }
   }
 }

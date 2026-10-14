@@ -1,6 +1,7 @@
 "use client";
 
 import type { PublicExercise } from "@/lib/exercises/types";
+import { CostedSelect } from "./types/CostedSelect";
 import { FillBlank } from "./types/FillBlank";
 import { MatchPairs } from "./types/MatchPairs";
 import { MultipleChoice } from "./types/MultipleChoice";
@@ -23,5 +24,7 @@ export function ExerciseView({ exercise }: { exercise: PublicExercise }): React.
       return <MatchPairs exercise={exercise} />;
     case "order-steps":
       return <OrderSteps exercise={exercise} />;
+    case "costed-select":
+      return <CostedSelect exercise={exercise} />;
   }
 }

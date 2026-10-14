@@ -207,6 +207,86 @@ export type OrderStepsReview = {
   steps: Record<string, { isCorrect: boolean; position: number; feedback?: string }>;
 };
 
+// ---------- Цена выбора (costed-select) ----------
+// Собственный тип: у каждого варианта есть цена в токенах; нужно собрать промпт —
+// взять нужное и не набрать «воды». Для итоговых упражнений повышенной сложности.
+
+// Вариант, который видит пользователь: текст и цена в токенах (цена публична)
+export type CostedOption = {
+  id: string;
+  text: string;
+  cost: number;
+};
+
+// Нужное для задачи, «вода» или то, что нельзя отдавать модели
+export type CostedItemKind = "needed" | "noise" | "danger";
+
+// Сведение в банке: одна версия или две (полная и краткая). Версии показываются
+// как отдельные варианты вразброс — можно отметить обе, тогда вторая будет дублем.
+// Вид сведения и пояснение — приватные
+export type CostedSelectItem = {
+  id: string;
+  versions: CostedOption[];
+  kind: CostedItemKind;
+  feedback?: string;
+};
+
+export type CostedSelectExercise = {
+  id: string;
+  type: "costed-select";
+  // Задача, под которую собирают промпт
+  question: string;
+  // От 4 до 8 сведений
+  items: CostedSelectItem[];
+  // Порядок показа: id всех версий. Версии одного сведения не стоят рядом
+  // (проверяется при запуске)
+  order: string[];
+  // Итоговое упражнение повышенной сложности — в карточке метка «★ Задача со звёздочкой»
+  starred?: boolean;
+  explanation: string;
+};
+
+export type PublicCostedSelect = {
+  id: string;
+  type: "costed-select";
+  question: string;
+  // Все версии всех сведений — вперемешку, в порядке показа
+  options: CostedOption[];
+  starred: boolean;
+};
+
+// id отмеченных вариантов
+export type CostedSelectAnswer = {
+  selected: string[];
+};
+
+// Разбор варианта:
+// needed — нужное, засчитано целиком; needed-long — нужное, но есть версия короче
+// (полезна только её часть, остальное — «вода»); duplicate — вторая версия уже взятого
+// сведения (целиком «вода»); noise — «вода»; danger — нельзя отдавать модели;
+// danger-avoided — опасное, которое верно не взяли (только если элемент «ничего опасного
+// не отдали» засчитан); missed — нужное, которое пропустили
+// (отмечается у самой короткой версии); neutral — без отметки
+export type CostedOptionStatus =
+  | "needed"
+  | "needed-long"
+  | "duplicate"
+  | "noise"
+  | "danger"
+  | "danger-avoided"
+  | "missed"
+  | "neutral";
+
+export type CostedSelectReview = {
+  type: "costed-select";
+  options: Record<string, { status: CostedOptionStatus; feedback?: string }>;
+  // Состав промпта в токенах: полезное, «вода», опасное
+  composition: { useful: number; noise: number; danger: number };
+  // Полнота: сколько нужных сведений взято из скольких — показывается рядом с эффективностью,
+  // потому что эффективность считается только от набранного и полноту не отражает
+  needed: { included: number; total: number };
+};
+
 // ---------- Общие типы ----------
 
 // По мере добавления типов сюда дописываются новые варианты через `|`
@@ -215,19 +295,22 @@ export type Exercise =
   | TrueFalseExercise
   | FillBlankExercise
   | MatchPairsExercise
-  | OrderStepsExercise;
+  | OrderStepsExercise
+  | CostedSelectExercise;
 export type PublicExercise =
   | PublicMultipleChoice
   | PublicTrueFalse
   | PublicFillBlank
   | PublicMatchPairs
-  | PublicOrderSteps;
+  | PublicOrderSteps
+  | PublicCostedSelect;
 export type ExerciseReviewDetails =
   | MultipleChoiceReview
   | TrueFalseReview
   | FillBlankReview
   | MatchPairsReview
-  | OrderStepsReview;
+  | OrderStepsReview
+  | CostedSelectReview;
 
 // Итог проверки: верно (балл 1), частично верно (между 0 и 1), неверно (0)
 export type Verdict = "correct" | "partial" | "incorrect";
