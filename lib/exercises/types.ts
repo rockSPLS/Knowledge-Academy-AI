@@ -287,6 +287,58 @@ export type CostedSelectReview = {
   needed: { included: number; total: number };
 };
 
+// ---------- Улучшите промпт (prompt-rewrite) ----------
+// Продвинутый тип: дан слабый промпт и неудачный ответ модели на него — пользователь
+// сам переписывает промпт. Проверка без ИИ: по признакам в тексте (рубрика),
+// после раскрытия — заготовленный образец сильного промпта.
+
+// Признак сильного промпта (пункт рубрики). Признак найден, если в тексте
+// совпал хотя бы один шаблон. Всё приватно: названия признаков подсказывают ответ
+export type PromptRewriteCriterion = {
+  id: string;
+  // Название в разборе, например «Контекст: что есть дома»
+  label: string;
+  // Как добавить признак, если его не нашли
+  howTo: string;
+  // Регулярные выражения для нормализованного текста (нижний регистр, «ё» → «е»)
+  patterns: RegExp[];
+};
+
+export type PromptRewriteExercise = {
+  id: string;
+  type: "prompt-rewrite";
+  // Ситуация: что пользователь хочет получить от модели
+  question: string;
+  // Слабый промпт — с него начинается поле ввода
+  weakPrompt: string;
+  // Заготовленный неудачный ответ модели на слабый промпт
+  weakAnswer: string;
+  // От 2 до 6 признаков
+  criteria: PromptRewriteCriterion[];
+  // Образец сильного промпта (должен пройти все признаки — проверяется при запуске)
+  sample: string;
+  explanation: string;
+};
+
+export type PublicPromptRewrite = {
+  id: string;
+  type: "prompt-rewrite";
+  question: string;
+  weakPrompt: string;
+  weakAnswer: string;
+};
+
+export type PromptRewriteAnswer = {
+  text: string;
+};
+
+export type PromptRewriteReview = {
+  type: "prompt-rewrite";
+  // Признаки в порядке рубрики; howTo — у ненайденных
+  criteria: { id: string; label: string; found: boolean; howTo?: string }[];
+  sample: string;
+};
+
 // ---------- Общие типы ----------
 
 // По мере добавления типов сюда дописываются новые варианты через `|`
@@ -296,21 +348,24 @@ export type Exercise =
   | FillBlankExercise
   | MatchPairsExercise
   | OrderStepsExercise
-  | CostedSelectExercise;
+  | CostedSelectExercise
+  | PromptRewriteExercise;
 export type PublicExercise =
   | PublicMultipleChoice
   | PublicTrueFalse
   | PublicFillBlank
   | PublicMatchPairs
   | PublicOrderSteps
-  | PublicCostedSelect;
+  | PublicCostedSelect
+  | PublicPromptRewrite;
 export type ExerciseReviewDetails =
   | MultipleChoiceReview
   | TrueFalseReview
   | FillBlankReview
   | MatchPairsReview
   | OrderStepsReview
-  | CostedSelectReview;
+  | CostedSelectReview
+  | PromptRewriteReview;
 
 // Итог проверки: верно (балл 1), частично верно (между 0 и 1), неверно (0)
 export type Verdict = "correct" | "partial" | "incorrect";

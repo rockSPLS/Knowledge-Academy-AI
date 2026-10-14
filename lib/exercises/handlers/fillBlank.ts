@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MAX_ANSWER_ITEMS, MAX_ID_LENGTH, validateItemIds } from "../limits";
 import { verdictFromScore } from "../scoring";
+import { normalizeText as normalize } from "../text";
 import type {
   CheckResult,
   FillBlankExercise,
@@ -27,19 +28,6 @@ function splitText(text: string): FillBlankPart[] {
   }
   if (lastIndex < text.length) parts.push({ type: "text", value: text.slice(lastIndex) });
   return parts;
-}
-
-// Мягкая сверка: не важны регистр, «ё/е», лишние пробелы и знаки препинания по краям.
-// NFC склеивает «е» и две точки, набранные отдельными символами, в одну «ё»;
-// \p{P} — любые знаки препинания, включая «…», типографские кавычки и тире
-// (их подставляют клавиатуры телефонов). Знаки внутри слова («по-разному») остаются.
-function normalize(value: string): string {
-  return value
-    .normalize("NFC")
-    .toLowerCase()
-    .replaceAll("ё", "е")
-    .replace(/\s+/g, " ")
-    .replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, "");
 }
 
 export function toPublic(exercise: FillBlankExercise): PublicFillBlank {

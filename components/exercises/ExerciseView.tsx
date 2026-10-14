@@ -6,6 +6,7 @@ import { FillBlank } from "./types/FillBlank";
 import { MatchPairs } from "./types/MatchPairs";
 import { MultipleChoice } from "./types/MultipleChoice";
 import { OrderSteps } from "./types/OrderSteps";
+import { PromptRewrite } from "./types/PromptRewrite";
 import { TrueFalse } from "./types/TrueFalse";
 
 // Выбирает компонент по типу упражнения. Новый тип — новая ветка здесь.
@@ -26,5 +27,7 @@ export function ExerciseView({ exercise }: { exercise: PublicExercise }): React.
       return <OrderSteps exercise={exercise} />;
     case "costed-select":
       return <CostedSelect exercise={exercise} />;
+    case "prompt-rewrite":
+      return <PromptRewrite exercise={exercise} />;
   }
 }

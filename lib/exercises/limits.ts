@@ -8,6 +8,10 @@ export const MAX_ID_LENGTH = 32;
 // Максимальное число элементов в одном ответе
 export const MAX_ANSWER_ITEMS = 20;
 
+// Максимальная длина промпта в «Улучшите промпт»: хватает на подробный запрос, но не на «простыню».
+// Общая для поля ввода в браузере и для схемы запроса на сервере
+export const MAX_PROMPT_LENGTH = 2000;
+
 // Проверка id элемента упражнения для банка; возвращает текст ошибки или null
 export function validateItemIds(ids: string[], what: string): string | null {
   if (ids.some((id) => id.length === 0 || id.length > MAX_ID_LENGTH)) {
