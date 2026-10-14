@@ -10,11 +10,15 @@ export type ArticleMeta = {
   description: string;
   // Ключ значка темы на карточке статьи (сами значки — в components/articles/ArticleCard.tsx)
   icon: ArticleIcon;
+  // Шаг курса одним-двумя словами: из этих слов собирается строка-лозунг на главной,
+  // и они же подписаны на карточках («Шаг 1 · Понять»)
+  stage: string;
 };
 
 export type ArticleIcon = "cursor" | "ghost" | "blocks" | "shield";
 
-// Порядок важен: статьи образуют цикл «понять → не обмануться → применить → защитить себя».
+// Порядок важен: статьи идут по шагам курса (поле stage).
+// При изменении числа статей поправить заголовок и вступление на главной («четыре шага»).
 export const articles: ArticleMeta[] = [
   {
     slug: "how-llm-works",
@@ -23,6 +27,7 @@ export const articles: ArticleMeta[] = [
     description:
       "Языковая модель не ищет ответ, а предсказывает текст. Разбираем токены, обучение и внимание простыми словами, без математики.",
     icon: "cursor",
+    stage: "Понять",
   },
   {
     slug: "hallucinations",
@@ -31,6 +36,7 @@ export const articles: ArticleMeta[] = [
     description:
       "Почему нейросеть уверенно выдаёт неправду, какие бывают галлюцинации и как проверить ответ, чтобы не попасть впросак.",
     icon: "ghost",
+    stage: "Не обмануться",
   },
   {
     slug: "prompt-structure",
@@ -39,6 +45,7 @@ export const articles: ArticleMeta[] = [
     description:
       "Роль, задача, контекст, формат и примеры: из чего состоит эффективный промпт, с шаблоном и разбором слабого и сильного запроса.",
     icon: "blocks",
+    stage: "Применить",
   },
   {
     slug: "ai-safety",
@@ -47,6 +54,7 @@ export const articles: ArticleMeta[] = [
     description:
       "Какие данные не стоит вводить в нейросети, что такое инъекция промпта и как проверять код и ответы перед использованием.",
     icon: "shield",
+    stage: "Защитить себя",
   },
 ];
 

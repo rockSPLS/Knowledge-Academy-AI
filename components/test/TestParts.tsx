@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useTestContext } from "./TestContext";
 
 // Части страницы теста, которые читают общий тестовый контекст.
@@ -53,6 +54,14 @@ export function TestQuestions({ children }: { children: React.ReactNode }) {
 
 export function TestSummary() {
   const { isFinished, score, total, restart } = useRequiredTest();
+  const summaryRef = useRef<HTMLElement>(null);
+
+  // Тест завершён — переводим фокус к сводке: итог и разбор при этом появляются
+  // во всех карточках сразу, и без этого клавиатура и диктор остались бы у последнего вопроса
+  useEffect(() => {
+    if (isFinished) summaryRef.current?.focus();
+  }, [isFinished]);
+
   if (!isFinished) return null;
 
   // Баллы бывают дробными (частично верные ответы) — показываем с запятой: «2,6».
@@ -62,11 +71,20 @@ export function TestSummary() {
   });
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-surface p-5">
-      <h2 className="text-xl font-semibold">Тест завершён</h2>
+    <section
+      ref={summaryRef}
+      tabIndex={-1}
+      // Имя области — заголовок: при фокусе диктор объявит «Тест завершён»
+      aria-labelledby="test-summary-title"
+      className="space-y-3 rounded-xl border border-border bg-surface p-5 outline-none"
+    >
+      <h2 id="test-summary-title" className="text-xl font-semibold">
+        Тест завершён
+      </h2>
       <p>
         Ваш результат: {formattedScore} из {total}
       </p>
+      <p className="text-sm text-muted">Итог и разбор каждого вопроса — в карточках выше.</p>
       <button
         type="button"
         onClick={() => {

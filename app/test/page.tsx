@@ -9,14 +9,15 @@ export const metadata: Metadata = {
 };
 
 export default function TestPage() {
-  // Пока в тест входят все вопросы банка
+  // В тест входят все вопросы банка — в порядке курса
   const exerciseIds = getAllExerciseIds();
 
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-semibold">Итоговый тест</h1>
       <p className="text-lg text-muted">
-        Вопросы по всем темам портала с подсчётом баллов и итоговой сводкой.
+        Вопросы по всем темам курса. Ответ на каждый вопрос принимается сразу, изменить его
+        нельзя; итог, разбор и общий счёт появятся, когда вы ответите на все вопросы.
       </p>
       <TestProvider exerciseIds={exerciseIds}>
         <TestProgress />

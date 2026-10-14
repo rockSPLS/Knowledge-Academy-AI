@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CircleCheck, CircleMinus, CircleX, TriangleAlert, type LucideIcon } from "lucide-react";
+import { CircleCheck, CircleMinus, CircleX, Clock, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { CheckResult, Verdict } from "@/lib/exercises/types";
 import type { ExerciseMode, ExerciseStatus } from "./useExercise";
 
@@ -76,9 +76,13 @@ export function ExerciseShell({
 
   // Кнопки исчезают и появляются — переводим фокус на результат после проверки
   // и после раскрытия ответа, чтобы клавиатура и экранный диктор не «потерялись».
+  // В тесте — только на «Ответ принят» (итог ещё скрыт). Когда тест завершается, итоги
+  // появляются во всех карточках сразу, но фокус не забирают: его берёт итоговая сводка,
+  // где бы она ни стояла на странице.
+  const focusTrigger = mode === "test" ? isAnswered && !result : result;
   useEffect(() => {
-    if (result) resultRef.current?.focus();
-  }, [result]);
+    if (focusTrigger) resultRef.current?.focus();
+  }, [focusTrigger]);
 
   // Если раскрыть ответ не удалось — фокус на сообщение об ошибке
   useEffect(() => {
@@ -125,7 +129,14 @@ export function ExerciseShell({
             aria-disabled={isChecking}
             className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-accent-fill-foreground transition-colors hover:bg-accent-fill-hover aria-disabled:opacity-60"
           >
-            {isChecking ? "Проверяю…" : "Проверить"}
+            {/* В тесте итог появляется только в конце — кнопка не обещает проверку */}
+            {mode === "test"
+              ? isChecking
+                ? "Отправляю…"
+                : "Ответить"
+              : isChecking
+                ? "Проверяю…"
+                : "Проверить"}
           </button>
         )}
 
@@ -140,8 +151,21 @@ export function ExerciseShell({
         {status === "error" && (
           <p role="alert" className="inline-flex items-center gap-1.5 text-sm">
             <TriangleAlert size={16} aria-hidden="true" className="text-muted" />
-            Не удалось проверить ответ. Попробуйте ещё раз.
+            {mode === "test"
+              ? "Не удалось отправить ответ. Попробуйте ещё раз."
+              : "Не удалось проверить ответ. Попробуйте ещё раз."}
           </p>
+        )}
+
+        {/* Тест ещё идёт: итог скрыт до ответа на все вопросы (см. useExercise) */}
+        {isAnswered && !result && mode === "test" && (
+          <div ref={resultRef} tabIndex={-1} className="text-sm outline-none">
+            <p className="inline-flex items-center gap-1.5 font-semibold">
+              <Clock size={18} aria-hidden="true" className="text-accent" />
+              Ответ принят
+            </p>
+            <p className="mt-1 text-muted">Итог и разбор появятся, когда вы ответите на все вопросы.</p>
+          </div>
         )}
 
         {isAnswered && result && verdict && (

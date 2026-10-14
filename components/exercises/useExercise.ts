@@ -73,5 +73,10 @@ export function useExercise<TAnswer>(exerciseId: string) {
     setStatus("idle");
   }
 
-  return { status, result, revealError, submit, revealAnswer, reset, mode };
+  // В тесте итог и разбор скрыты, пока не отвечены все вопросы: тест — проверка себя,
+  // а разбор по ходу подсказывал бы ответы на похожие вопросы дальше.
+  // Сам результат уже отправлен в тест — он нужен для счёта.
+  const visibleResult = test && !test.isFinished ? null : result;
+
+  return { status, result: visibleResult, revealError, submit, revealAnswer, reset, mode };
 }

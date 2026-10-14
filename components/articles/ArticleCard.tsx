@@ -3,7 +3,7 @@ import { Blocks, Ghost, ShieldCheck, TextCursorInput, type LucideIcon } from "lu
 import type { ArticleIcon, ArticleMeta } from "@/lib/articles";
 
 // Карточка статьи в оглавлении курса: слева полоса со значком темы на всю высоту,
-// справа номер шага, название и описание.
+// справа шаг курса («Шаг 1 · Понять»), название и описание.
 
 const ICONS: Record<ArticleIcon, LucideIcon> = {
   // Курсор — образ «предсказания следующего слова», главной мысли статьи о LLM
@@ -33,7 +33,7 @@ export function ArticleCard({ article, step }: ArticleCardProps) {
       {/* min-w-0 и break-words: длинное слово переносится, а не обрезается краем карточки */}
       <span className="min-w-0 flex-1 space-y-1 p-5 break-words">
         <span className="block text-xs font-medium uppercase tracking-wide text-subtle">
-          Шаг {step}
+          Шаг {step} · {article.stage}
         </span>
         <span className="block font-semibold transition-colors group-hover:text-accent">{article.title}</span>
         <span className="block text-sm text-muted">{article.description}</span>
