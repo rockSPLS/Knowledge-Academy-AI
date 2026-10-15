@@ -371,7 +371,7 @@ const exercises: Exercise[] = [
         id: "history",
         kind: "needed",
         versions: [
-          { id: "chat-log", text: "Последние письма клиента целиком", cost: 220 },
+          { id: "chat-log", text: "Последние письма клиента целиком", cost: 1200 },
           { id: "complaints", text: "Кратко: клиент уже дважды жаловался на сроки", cost: 30 },
         ],
         feedback:
@@ -388,7 +388,7 @@ const exercises: Exercise[] = [
         id: "company",
         kind: "noise",
         versions: [
-          { id: "about-us", text: "Абзац об истории компании", cost: 120 },
+          { id: "about-us", text: "Абзац об истории компании", cost: 250 },
           { id: "since-2005", text: "Кратко: компания работает с 2005 года", cost: 20 },
         ],
         feedback: "Даже кратко история компании не помогает письму о задержке — это «вода».",

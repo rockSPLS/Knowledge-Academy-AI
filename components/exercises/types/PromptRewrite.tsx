@@ -18,8 +18,9 @@ import { useExercise } from "../useExercise";
 // после раскрытия — чек-лист признаков и образец.
 
 export function PromptRewrite({ exercise }: { exercise: PublicPromptRewrite }) {
-  // Поле сразу заполнено слабым промптом: задача — улучшить его, а не писать с нуля
-  const [text, setText] = useState(exercise.weakPrompt);
+  // Поле пустое: исходный промпт и так показан над ним, в поле он только дублировался бы.
+  // Скопировать исходный и дописать — тоже изменение; без дописок — «Измените промпт»
+  const [text, setText] = useState("");
   // Почему нельзя проверить: пустой текст или промпт не изменён
   const [problem, setProblem] = useState<"empty" | "unchanged" | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -112,6 +113,7 @@ export function PromptRewrite({ exercise }: { exercise: PublicPromptRewrite }) {
             onChange={(event) => setText(event.target.value)}
             readOnly={isLocked}
             rows={5}
+            placeholder="Напишите улучшенный промпт"
             maxLength={MAX_PROMPT_LENGTH}
             spellCheck
             aria-describedby={noteId}

@@ -248,7 +248,7 @@ export function MatchPairs({ exercise }: { exercise: PublicMatchPairs }) {
       typeName="Соедините пары"
       typeIcon={Link2}
       question={exercise.question}
-      instruction="Перетащите к каждому термину его определение — или нажмите определение, а затем ячейку"
+      instruction="Перетащите к каждому термину его определение (на телефоне — нажмите на определение и удерживайте) или нажмите определение, а затем ячейку"
       status={status}
       result={result}
       revealError={revealError}
