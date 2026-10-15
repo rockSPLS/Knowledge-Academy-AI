@@ -16,18 +16,22 @@ const CHOICES = [
 ] as const;
 
 export function TrueFalse({ exercise }: { exercise: PublicTrueFalse }) {
-  const { status, result, revealError, submit, revealAnswer, reset, mode } =
-    useExercise<TrueFalseAnswer>(exercise.id);
   const [answers, setAnswers] = useState<Record<string, boolean>>({});
   // Уникальный префикс имён групп, даже если упражнение встречается на странице дважды
   const groupPrefix = useId();
   const firstChoiceRef = useRef<HTMLInputElement>(null);
   // Пользователь пытался проверить, оценив не все утверждения — подсвечиваем пропущенные
   const [showMissing, setShowMissing] = useState(false);
-  const isLocked = status !== "idle" && status !== "error";
   const isComplete = exercise.statements.every((statement) =>
     Object.hasOwn(answers, statement.id),
   );
+  // Черновик для теста: ответ готов, когда оценены все утверждения
+  const { status, result, revealError, submit, revealAnswer, reset, mode } =
+    useExercise<TrueFalseAnswer>(exercise.id, {
+      answer: isComplete ? { answers } : null,
+      touched: Object.keys(answers).length > 0,
+    });
+  const isLocked = status !== "idle" && status !== "error";
 
   const details = result?.review?.details;
   const review: TrueFalseReview | null = details?.type === "true-false" ? details : null;
@@ -52,6 +56,7 @@ export function TrueFalse({ exercise }: { exercise: PublicTrueFalse }) {
 
   return (
     <ExerciseShell
+      exerciseId={exercise.id}
       typeName="Верно или неверно"
       typeIcon={ToggleRight}
       question={exercise.question}

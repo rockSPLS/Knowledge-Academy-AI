@@ -46,8 +46,6 @@ const collisionDetection: CollisionDetection = (args) => {
 };
 
 export function MatchPairs({ exercise }: { exercise: PublicMatchPairs }) {
-  const { status, result, revealError, submit, revealAnswer, reset, mode } =
-    useExercise<MatchPairsAnswer>(exercise.id);
   // id термина → id поставленного к нему определения
   const [placed, setPlaced] = useState<Record<string, string>>({});
   // Определение, выбранное нажатием (ждёт, когда пользователь нажмёт ячейку)
@@ -70,8 +68,16 @@ export function MatchPairs({ exercise }: { exercise: PublicMatchPairs }) {
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
   );
 
-  const isLocked = status !== "idle" && status !== "error";
   const isComplete = exercise.terms.every((term) => Object.hasOwn(placed, term.id));
+  // Черновик для теста: ответ готов, когда заполнены все пары
+  const { status, result, revealError, submit, revealAnswer, reset, mode } =
+    useExercise<MatchPairsAnswer>(exercise.id, {
+      answer: isComplete ? { matches: placed } : null,
+      touched: Object.keys(placed).length > 0,
+    });
+  const isLocked = status !== "idle" && status !== "error";
+  // Выбор нажатием показываем, только пока ответ можно менять
+  const shownSelected = isLocked ? null : selected;
   // Стопка — определения, которые ещё не стоят в ячейках (в авторском порядке)
   const placedIds = new Set(Object.values(placed));
   const bank = exercise.definitions.filter((definition) => !placedIds.has(definition.id));
@@ -238,6 +244,7 @@ export function MatchPairs({ exercise }: { exercise: PublicMatchPairs }) {
 
   return (
     <ExerciseShell
+      exerciseId={exercise.id}
       typeName="Соедините пары"
       typeIcon={Link2}
       question={exercise.question}
@@ -282,7 +289,7 @@ export function MatchPairs({ exercise }: { exercise: PublicMatchPairs }) {
                   termId={term.id}
                   termText={term.text}
                   isMissing={showMissing && !definitionId}
-                  hasSelection={selected !== null}
+                  hasSelection={shownSelected !== null}
                   mark={mark}
                   disabled={isLocked}
                   onClick={() => handleSlotClick(term.id)}
@@ -295,11 +302,11 @@ export function MatchPairs({ exercise }: { exercise: PublicMatchPairs }) {
                         text={definitionText(definitionId)}
                         // Для диктора: к какому термину стоит карточка и что сделает нажатие
                         label={
-                          selected && selected !== definitionId
+                          shownSelected && shownSelected !== definitionId
                             ? `Поставить выбранное определение к термину «${term.text}» вместо: ${definitionText(definitionId)}`
                             : `${definitionText(definitionId)} (у термина «${term.text}»)`
                         }
-                        isSelected={selected === definitionId}
+                        isSelected={shownSelected === definitionId}
                         isDragging={dragging === definitionId}
                         disabled={isLocked}
                         onClick={() => handleCardClick(definitionId, term.id)}
@@ -344,7 +351,7 @@ export function MatchPairs({ exercise }: { exercise: PublicMatchPairs }) {
           <Bank
             definitions={bank}
             idPrefix={idPrefix}
-            selected={selected}
+            selected={shownSelected}
             dragging={dragging}
             onCardClick={handleCardClick}
           />

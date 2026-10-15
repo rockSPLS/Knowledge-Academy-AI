@@ -18,8 +18,6 @@ import { useExercise } from "../useExercise";
 // после раскрытия — чек-лист признаков и образец.
 
 export function PromptRewrite({ exercise }: { exercise: PublicPromptRewrite }) {
-  const { status, result, revealError, submit, revealAnswer, reset, mode } =
-    useExercise<PromptRewriteAnswer>(exercise.id);
   // Поле сразу заполнено слабым промптом: задача — улучшить его, а не писать с нуля
   const [text, setText] = useState(exercise.weakPrompt);
   // Почему нельзя проверить: пустой текст или промпт не изменён
@@ -27,6 +25,15 @@ export function PromptRewrite({ exercise }: { exercise: PublicPromptRewrite }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fieldId = useId();
   const noteId = useId();
+  // Черновик для теста: ответ готов, если промпт не пустой и отличается от исходного
+  // (та же нормализация, что на сервере)
+  const isRewritten =
+    normalizeText(text) !== "" && normalizeText(text) !== normalizeText(exercise.weakPrompt);
+  const { status, result, revealError, submit, revealAnswer, reset, mode } =
+    useExercise<PromptRewriteAnswer>(exercise.id, {
+      answer: isRewritten ? { text } : null,
+      touched: isRewritten,
+    });
   const isLocked = status !== "idle" && status !== "error";
 
   const details = result?.review?.details;
@@ -64,6 +71,7 @@ export function PromptRewrite({ exercise }: { exercise: PublicPromptRewrite }) {
 
   return (
     <ExerciseShell
+      exerciseId={exercise.id}
       typeName="Улучшите промпт"
       typeIcon={FilePenLine}
       question={exercise.question}

@@ -47,12 +47,20 @@ const STATUS_MARKS: Record<
 };
 
 export function CostedSelect({ exercise }: { exercise: PublicCostedSelect }) {
-  const { status, result, revealError, submit, revealAnswer, reset, mode } =
-    useExercise<CostedSelectAnswer>(exercise.id);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Пользователь нажал «Проверить», ничего не выбрав
   const [showEmpty, setShowEmpty] = useState(false);
   const idPrefix = useId();
+  // Выбранное — в порядке показа, чтобы ответ не зависел от порядка нажатий
+  const selectedInOrder = exercise.options
+    .filter((option) => selected.has(option.id))
+    .map((option) => option.id);
+  // Черновик для теста: ответ готов, если выбрано хоть что-то
+  const { status, result, revealError, submit, revealAnswer, reset, mode } =
+    useExercise<CostedSelectAnswer>(exercise.id, {
+      answer: selectedInOrder.length > 0 ? { selected: selectedInOrder } : null,
+      touched: selectedInOrder.length > 0,
+    });
   const isLocked = status !== "idle" && status !== "error";
 
   const used = exercise.options
@@ -84,12 +92,7 @@ export function CostedSelect({ exercise }: { exercise: PublicCostedSelect }) {
       document.getElementById(firstOptionId)?.focus();
       return;
     }
-    // В порядке показа — чтобы ответ не зависел от порядка нажатий
-    submit({
-      selected: exercise.options
-        .filter((option) => selected.has(option.id))
-        .map((option) => option.id),
-    });
+    submit({ selected: selectedInOrder });
   }
 
   function retry() {
@@ -101,6 +104,7 @@ export function CostedSelect({ exercise }: { exercise: PublicCostedSelect }) {
 
   return (
     <ExerciseShell
+      exerciseId={exercise.id}
       typeName="Цена выбора"
       typeIcon={Coins}
       badge={exercise.starred ? { label: "Задача со звёздочкой", Icon: Star } : undefined}

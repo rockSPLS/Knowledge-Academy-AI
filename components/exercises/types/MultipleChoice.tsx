@@ -25,8 +25,6 @@ const STATUS_MARKS: Partial<Record<ChoiceOptionStatus, ReviewMark & { label: str
 };
 
 export function MultipleChoice({ exercise }: { exercise: PublicMultipleChoice }) {
-  const { status, result, revealError, submit, revealAnswer, reset, mode } =
-    useExercise<MultipleChoiceAnswer>(exercise.id);
   const [selected, setSelected] = useState<string[]>([]);
   const [isLimitHintVisible, setLimitHintVisible] = useState(false);
   // Пользователь пытался проверить, ничего не выбрав
@@ -34,6 +32,12 @@ export function MultipleChoice({ exercise }: { exercise: PublicMultipleChoice })
   // Уникальное имя группы, даже если одно упражнение встречается на странице дважды
   const groupName = useId();
   const firstOptionRef = useRef<HTMLInputElement>(null);
+  // Черновик для теста: ответ готов, если выбран хотя бы один вариант
+  const { status, result, revealError, submit, revealAnswer, reset, mode } =
+    useExercise<MultipleChoiceAnswer>(exercise.id, {
+      answer: selected.length > 0 ? { selected } : null,
+      touched: selected.length > 0,
+    });
   const isLocked = status !== "idle" && status !== "error";
   const isMultiple = exercise.maxSelections > 1;
   // Разбор по вариантам — есть, только если сервер раскрыл ответ
@@ -79,6 +83,7 @@ export function MultipleChoice({ exercise }: { exercise: PublicMultipleChoice })
 
   return (
     <ExerciseShell
+      exerciseId={exercise.id}
       typeName="Выбор ответа"
       typeIcon={ListChecks}
       question={exercise.question}

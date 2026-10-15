@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { CircleCheck, CircleMinus, CircleX, Clock, TriangleAlert, type LucideIcon } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { CircleCheck, CircleMinus, CircleX, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { CheckResult, Verdict } from "@/lib/exercises/types";
+import { useTestContext } from "@/components/test/TestContext";
 import type { ExerciseMode, ExerciseStatus } from "./useExercise";
 
 // Итог всегда обозначается значком и словом, а не только цветом —
@@ -27,8 +28,20 @@ const REVEAL_BUTTON = `${SECONDARY_BUTTON} border-border-strong bg-background ho
 // кнопка проверки и блок результата. Поле для ответа передаётся через children —
 // его рисует конкретный тип упражнения (он же подсвечивает варианты при разборе).
 // Все типы выглядят одинаково и различаются значком и названием типа.
+// В тесте своей кнопки у упражнения нет: все ответы отправляет «Завершить тест»
+// (components/test/TestParts.tsx), а карточка подсвечивается, если вопрос пропущен
+// или не заполнен при попытке завершить.
+
+// Подписи к подсветке в тесте
+const TEST_NOTICES = {
+  skipped: "Вы пропустили этот вопрос",
+  missing: "Ответьте на этот вопрос",
+  incomplete: "Ответ заполнен не полностью",
+} as const;
 
 type ExerciseShellProps = {
+  // id упражнения: по нему тест подсвечивает карточку и прокручивает к ней
+  exerciseId: string;
   typeName: string;
   typeIcon: LucideIcon;
   // Необязательная метка в строке типа (справа), например «★ Задача со звёздочкой» у итогового упражнения
@@ -50,6 +63,7 @@ type ExerciseShellProps = {
 };
 
 export function ExerciseShell({
+  exerciseId,
   typeName,
   typeIcon: TypeIcon,
   badge,
@@ -76,13 +90,17 @@ export function ExerciseShell({
 
   // Кнопки исчезают и появляются — переводим фокус на результат после проверки
   // и после раскрытия ответа, чтобы клавиатура и экранный диктор не «потерялись».
-  // В тесте — только на «Ответ принят» (итог ещё скрыт). Когда тест завершается, итоги
-  // появляются во всех карточках сразу, но фокус не забирают: его берёт итоговая сводка,
-  // где бы она ни стояла на странице.
-  const focusTrigger = mode === "test" ? isAnswered && !result : result;
+  // В тесте — никогда: итоги появляются во всех карточках сразу, и фокус берёт
+  // итоговая сводка, где бы она ни стояла на странице.
   useEffect(() => {
-    if (focusTrigger) resultRef.current?.focus();
-  }, [focusTrigger]);
+    if (mode === "inline" && result) resultRef.current?.focus();
+  }, [mode, result]);
+
+  // Тест: пропущен ли вопрос или не заполнен при попытке завершить (после завершения — нет)
+  const test = useTestContext();
+  const notice = test && !test.isFinished ? test.noticeFor(exerciseId) : null;
+  // id вопроса — имя карточки: тест переводит на неё фокус, и диктор назовёт вопрос
+  const questionId = useId();
 
   // Если раскрыть ответ не удалось — фокус на сообщение об ошибке
   useEffect(() => {
@@ -95,7 +113,17 @@ export function ExerciseShell({
   const canRetryOrReveal = mode === "inline" && result !== null && !result.review;
 
   return (
-    <section className="my-8 rounded-xl border border-border bg-surface p-5">
+    // В тесте data-exercise-id и tabIndex — чтобы тест мог прокрутить к незаполненному вопросу
+    // и перевести на него фокус; aria-labelledby — диктор назовёт вопрос
+    <section
+      data-exercise-id={mode === "test" ? exerciseId : undefined}
+      tabIndex={mode === "test" ? -1 : undefined}
+      aria-labelledby={mode === "test" ? questionId : undefined}
+      // scroll-mt — чтобы при прокрутке к вопросу его не закрыла липкая полоса прогресса теста
+      className={`my-8 scroll-mt-24 rounded-xl border bg-surface p-5 outline-none ${
+        notice ? "border-accent ring-1 ring-accent" : "border-border"
+      }`}
+    >
       {/* fieldset + legend связывают варианты ответа с вопросом для экранных дикторов */}
       <fieldset>
         <legend className="w-full">
@@ -113,14 +141,23 @@ export function ExerciseShell({
               </span>
             )}
           </span>
-          <span className="mt-4 block font-semibold">{question}</span>
+          <span id={questionId} className="mt-4 block font-semibold">
+            {question}
+          </span>
           <span className="mt-1 block text-sm text-muted">{instruction}</span>
+          {notice && (
+            <span className="mt-2 flex items-center gap-1.5 text-sm font-medium text-accent">
+              <TriangleAlert size={16} aria-hidden="true" />
+              {TEST_NOTICES[notice]}
+            </span>
+          )}
         </legend>
         <div className="mt-4">{children}</div>
       </fieldset>
 
       <div className="mt-4 space-y-3">
-        {!isAnswered && (
+        {/* В тесте ответы отправляет общая кнопка «Завершить тест» */}
+        {mode === "inline" && !isAnswered && (
           <button
             type="button"
             onClick={() => {
@@ -131,14 +168,7 @@ export function ExerciseShell({
             aria-disabled={isChecking}
             className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-accent-fill-foreground transition-colors hover:bg-accent-fill-hover aria-disabled:opacity-60"
           >
-            {/* В тесте итог появляется только в конце — кнопка не обещает проверку */}
-            {mode === "test"
-              ? isChecking
-                ? "Отправляю…"
-                : "Ответить"
-              : isChecking
-                ? "Проверяю…"
-                : "Проверить"}
+            {isChecking ? "Проверяю…" : "Проверить"}
           </button>
         )}
 
@@ -150,24 +180,23 @@ export function ExerciseShell({
           </p>
         )}
 
-        {status === "error" && (
-          <p role="alert" className="inline-flex items-center gap-1.5 text-sm">
-            <TriangleAlert size={16} aria-hidden="true" className="text-muted" />
-            {mode === "test"
-              ? "Не удалось отправить ответ. Попробуйте ещё раз."
-              : "Не удалось проверить ответ. Попробуйте ещё раз."}
-          </p>
+        {/* Тест: ответ ушёл, итог появится после завершения (если часть ответов не дошла,
+            видно, какие уже приняты и не меняются) */}
+        {mode === "test" && isAnswered && !result && (
+          <p className="text-sm text-muted">Ответ отправлен</p>
         )}
 
-        {/* Тест ещё идёт: итог скрыт до ответа на все вопросы (см. useExercise) */}
-        {isAnswered && !result && mode === "test" && (
-          <div ref={resultRef} tabIndex={-1} className="text-sm outline-none">
-            <p className="inline-flex items-center gap-1.5 font-semibold">
-              <Clock size={18} aria-hidden="true" className="text-accent" />
-              Ответ принят
-            </p>
-            <p className="mt-1 text-muted">Итог и разбор появятся, когда вы ответите на все вопросы.</p>
-          </div>
+        {/* В тесте ошибку объявляет панель «Завершить тест», здесь — только текст */}
+        {status === "error" && (
+          <p
+            role={mode === "inline" ? "alert" : undefined}
+            className="inline-flex items-center gap-1.5 text-sm"
+          >
+            <TriangleAlert size={16} aria-hidden="true" className="text-muted" />
+            {mode === "test"
+              ? "Не удалось отправить ответ. Нажмите «Завершить тест» ещё раз."
+              : "Не удалось проверить ответ. Попробуйте ещё раз."}
+          </p>
         )}
 
         {isAnswered && result && verdict && (

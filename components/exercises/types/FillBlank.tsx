@@ -12,8 +12,6 @@ import { useExercise } from "../useExercise";
 // когда заполнены все пропуски.
 
 export function FillBlank({ exercise }: { exercise: PublicFillBlank }) {
-  const { status, result, revealError, submit, revealAnswer, reset, mode } =
-    useExercise<FillBlankAnswer>(exercise.id);
   const blankIds = exercise.parts.flatMap((part) => (part.type === "blank" ? [part.id] : []));
   const [values, setValues] = useState<Record<string, string>>({});
   const firstInputRef = useRef<HTMLInputElement>(null);
@@ -21,8 +19,14 @@ export function FillBlank({ exercise }: { exercise: PublicFillBlank }) {
   const idPrefix = useId();
   // Пользователь пытался проверить, заполнив не все пропуски — подсвечиваем пустые
   const [showMissing, setShowMissing] = useState(false);
-  const isLocked = status !== "idle" && status !== "error";
   const isComplete = blankIds.every((id) => (values[id] ?? "").trim() !== "");
+  // Черновик для теста: ответ готов, когда заполнены все пропуски
+  const { status, result, revealError, submit, revealAnswer, reset, mode } =
+    useExercise<FillBlankAnswer>(exercise.id, {
+      answer: isComplete ? { blanks: values } : null,
+      touched: blankIds.some((id) => (values[id] ?? "").trim() !== ""),
+    });
+  const isLocked = status !== "idle" && status !== "error";
 
   function handleSubmit() {
     if (!isComplete) {
@@ -37,7 +41,8 @@ export function FillBlank({ exercise }: { exercise: PublicFillBlank }) {
 
   // Enter в поле — то же, что кнопка «Проверить», как в обычной форме
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Enter" && !isLocked) handleSubmit();
+    // В тесте своей отправки нет — ответы отправляет «Завершить тест»
+    if (event.key === "Enter" && mode === "inline" && !isLocked) handleSubmit();
   }
 
   const details = result?.review?.details;
@@ -62,6 +67,7 @@ export function FillBlank({ exercise }: { exercise: PublicFillBlank }) {
 
   return (
     <ExerciseShell
+      exerciseId={exercise.id}
       typeName="Заполните пропуски"
       typeIcon={PencilLine}
       question={exercise.question}

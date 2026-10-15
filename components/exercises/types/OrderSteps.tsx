@@ -38,8 +38,6 @@ const SCREEN_READER_INSTRUCTIONS =
   "Чтобы переместить шаг, используйте кнопки «выше» и «ниже» рядом с ним. Шаг можно и перетащить мышью или пальцем.";
 
 export function OrderSteps({ exercise }: { exercise: PublicOrderSteps }) {
-  const { status, result, revealError, submit, revealAnswer, reset, mode } =
-    useExercise<OrderStepsAnswer>(exercise.id);
   const initialOrder = exercise.steps.map((step) => step.id);
   // Текущий порядок шагов (id)
   const [order, setOrder] = useState<string[]>(initialOrder);
@@ -62,10 +60,16 @@ export function OrderSteps({ exercise }: { exercise: PublicOrderSteps }) {
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
   );
 
-  const isLocked = status !== "idle" && status !== "error";
   // Исходный порядок перемешан, поэтому ответ «заполнен» сразу. Без единой перестановки
   // не проверяем — иначе баллы можно получить за чужую перестановку.
   const isChanged = order.some((id, index) => id !== initialOrder[index]);
+  // Черновик для теста: ответ готов, когда шаги переставлены
+  const { status, result, revealError, submit, revealAnswer, reset, mode } =
+    useExercise<OrderStepsAnswer>(exercise.id, {
+      answer: isChanged ? { order } : null,
+      touched: isChanged,
+    });
+  const isLocked = status !== "idle" && status !== "error";
   const total = order.length;
 
   const details = result?.review?.details;
@@ -145,6 +149,7 @@ export function OrderSteps({ exercise }: { exercise: PublicOrderSteps }) {
 
   return (
     <ExerciseShell
+      exerciseId={exercise.id}
       typeName="Расставьте шаги"
       typeIcon={ListOrdered}
       question={exercise.question}
