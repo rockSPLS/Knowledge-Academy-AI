@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LogoMark } from "./LogoMark";
 import { NavLink } from "./NavLink";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -9,7 +10,8 @@ export function SiteHeader() {
   return (
     <header className="border-b border-border">
       <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3">
-        <Link href="/" className="font-semibold hover:text-accent">
+        <Link href="/" className="inline-flex items-center gap-2 font-semibold hover:text-accent">
+          <LogoMark size={36} />
           Prompt Engineering Academy
         </Link>
         <div className="flex items-center gap-2">
