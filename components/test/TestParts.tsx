@@ -1,13 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronUp, TriangleAlert } from "lucide-react";
 import { plural } from "@/lib/plural";
 import { useTestContext } from "./TestContext";
 
 // Части страницы теста, которые читают общий тестовый контекст.
 
 const TEST_START_ID = "test-start";
+// Панель «Завершить тест» — сюда ведёт кнопка «Вниз»
+const TEST_FINISH_ID = "test-finish";
+
+// Круглые кнопки прокрутки: поверх страницы, поэтому с рамкой и тенью
+const SCROLL_BUTTON =
+  "flex h-10 w-10 items-center justify-center rounded-full border border-border-strong bg-background text-accent shadow-md transition-colors hover:bg-surface";
 
 function useRequiredTest() {
   const test = useTestContext();
@@ -91,7 +97,12 @@ export function TestFinish() {
   }
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-surface p-5">
+    // id и tabIndex — сюда ведёт кнопка «Вниз» и переводит фокус
+    <section
+      id={TEST_FINISH_ID}
+      tabIndex={-1}
+      className="space-y-3 rounded-xl border border-border bg-surface p-5 outline-none"
+    >
       <p className="text-sm text-muted">
         Готово {readyCount} из {total}.
         {state === "sent" ? "" : " Пока тест не завершён, ответы можно менять."}
@@ -120,6 +131,68 @@ export function TestFinish() {
         </p>
       )}
     </section>
+  );
+}
+
+// Кнопки прокрутки в правом нижнем углу: тест длинный, листать до начала или до кнопки
+// «Завершить тест» долго. «Наверх» видна, когда страницу прокрутили; «Вниз» — пока
+// не дошли до конца. После завершения теста «Вниз» ведёт к итогам
+export function TestScrollButtons() {
+  const { isFinished } = useRequiredTest();
+  const [isNearTop, setNearTop] = useState(true);
+  const [isNearBottom, setNearBottom] = useState(false);
+
+  useEffect(() => {
+    function update() {
+      const margin = 300;
+      setNearTop(window.scrollY < margin);
+      setNearBottom(
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - margin,
+      );
+    }
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+
+  function scrollBehavior(): ScrollBehavior {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  }
+
+  function toTop() {
+    window.scrollTo({ top: 0, behavior: scrollBehavior() });
+    // Фокус — на начало теста, чтобы и клавиатура оказалась наверху
+    document.getElementById(TEST_START_ID)?.focus({ preventScroll: true });
+  }
+
+  function toBottom() {
+    const target =
+      document.getElementById(TEST_FINISH_ID) ??
+      document.getElementById("test-summary-title")?.closest("section") ??
+      null;
+    target?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
+    target?.focus({ preventScroll: true });
+  }
+
+  const downLabel = isFinished ? "Вниз, к итогам теста" : "Вниз, к кнопке «Завершить тест»";
+
+  return (
+    <div className="fixed right-4 bottom-4 z-20 flex flex-col gap-2">
+      {!isNearTop && (
+        <button type="button" onClick={toTop} aria-label="Наверх, к началу теста" title="Наверх, к началу теста" className={SCROLL_BUTTON}>
+          <ChevronUp size={22} aria-hidden="true" />
+        </button>
+      )}
+      {!isNearBottom && (
+        <button type="button" onClick={toBottom} aria-label={downLabel} title={downLabel} className={SCROLL_BUTTON}>
+          <ChevronDown size={22} aria-hidden="true" />
+        </button>
+      )}
+    </div>
   );
 }
 

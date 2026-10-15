@@ -67,13 +67,17 @@ export function ThemeToggle() {
     }
   }
 
+  // Подпись говорит, что сделает нажатие: при тёмной теме на кнопке солнце и
+  // «Включить светлую тему». Постоянная подпись «Тёмная тема» при уже включённой
+  // тёмной теме читалась как противоречие
+  const label = isDark ? "Включить светлую тему" : "Включить тёмную тему";
+
   return (
     <button
       type="button"
       onClick={toggle}
-      aria-label="Тёмная тема"
-      aria-pressed={isDark}
-      title="Тёмная тема"
+      aria-label={label}
+      title={label}
       className="rounded-md p-2 text-muted transition-colors hover:bg-surface hover:text-foreground"
     >
       {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}

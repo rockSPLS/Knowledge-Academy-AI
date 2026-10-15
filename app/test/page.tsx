@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import { Exercise } from "@/components/exercises/Exercise";
 import { TestProvider } from "@/components/test/TestContext";
-import { TestFinish, TestProgress, TestQuestions, TestSummary } from "@/components/test/TestParts";
+import {
+  TestFinish,
+  TestProgress,
+  TestQuestions,
+  TestScrollButtons,
+  TestSummary,
+} from "@/components/test/TestParts";
 import { getAllExerciseIds } from "@/lib/exercises/bank";
 
 export const metadata: Metadata = {
@@ -29,6 +35,7 @@ export default function TestPage() {
           <TestFinish />
         </TestQuestions>
         <TestSummary />
+        <TestScrollButtons />
       </TestProvider>
     </div>
   );
