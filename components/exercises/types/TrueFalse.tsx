@@ -89,8 +89,10 @@ export function TrueFalse({ exercise }: { exercise: PublicTrueFalse }) {
                     : "border-border bg-background"
               }`}
             >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span id={textId} className="min-w-0 flex-1">
+              {/* На узком экране текст на всю ширину, кнопки — под ним; иначе текст сжимался
+                  в столбик рядом с кнопками. С ширины sm — в одну строку */}
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                <span id={textId} className="min-w-0 sm:flex-1">
                   {statement.text}
                 </span>
                 <div

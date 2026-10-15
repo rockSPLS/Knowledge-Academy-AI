@@ -26,8 +26,9 @@ import { REVIEW_MARKS, type ReviewMark } from "../reviewMarks";
 import { useExercise } from "../useExercise";
 
 // Упражнение «Расставьте шаги»: шаги выстраивают по порядку — перетаскиванием
-// (мышью или долгим нажатием пальца) или кнопками «выше / ниже». Кнопки — запасной
-// способ без перетаскивания (WCAG 2.2, п. 2.5.7), он же работает с клавиатуры.
+// (мышью за ручку или долгим нажатием пальца в любом месте шага) или кнопками
+// «выше / ниже». Кнопки — запасной способ без перетаскивания (WCAG 2.2, п. 2.5.7),
+// он же работает с клавиатуры.
 
 // Скрытая подсказка, которую библиотека всё равно добавляет на страницу (по умолчанию —
 // английская). К шагам она не привязана — их атрибуты мы не ставим, — поэтому диктор её
@@ -44,6 +45,9 @@ export function OrderSteps({ exercise }: { exercise: PublicOrderSteps }) {
   const [order, setOrder] = useState<string[]>(initialOrder);
   // Сообщение для экранного диктора при работе кнопками
   const [liveMessage, setLiveMessage] = useState("");
+  // Шаги, которые пользователь двигал сам (а не те, что сдвинулись следом): только они
+  // подписаны «было N» — иначе после одного перетаскивания рамку получали бы все шаги между
+  const [movedIds, setMovedIds] = useState<Set<string>>(new Set());
   // Пользователь нажал «Проверить», не переставив ни одного шага
   const [showUnchanged, setShowUnchanged] = useState(false);
   const idPrefix = useId();
@@ -82,6 +86,7 @@ export function OrderSteps({ exercise }: { exercise: PublicOrderSteps }) {
     const to = from + delta;
     if (to < 0 || to >= total) return;
     setOrder(arrayMove(order, from, to));
+    setMovedIds((prev) => new Set(prev).add(id));
     announce(`Шаг перемещён на позицию ${to + 1} из ${total}.`);
     // При перемещении вниз React переносит в DOM сам шаг вместе с нажатой кнопкой,
     // и фокус слетает в начало страницы — возвращаем его на ту же кнопку
@@ -92,6 +97,7 @@ export function OrderSteps({ exercise }: { exercise: PublicOrderSteps }) {
 
   function handleDragEnd({ active, over }: DragEndEvent) {
     if (!over || active.id === over.id) return;
+    setMovedIds((prev) => new Set(prev).add(String(active.id)));
     setOrder((prev) =>
       arrayMove(prev, prev.indexOf(String(active.id)), prev.indexOf(String(over.id))),
     );
@@ -128,6 +134,7 @@ export function OrderSteps({ exercise }: { exercise: PublicOrderSteps }) {
 
   function retry() {
     setOrder(initialOrder);
+    setMovedIds(new Set());
     setShowUnchanged(false);
     setLiveMessage("");
     reset();
@@ -141,7 +148,7 @@ export function OrderSteps({ exercise }: { exercise: PublicOrderSteps }) {
       typeName="Расставьте шаги"
       typeIcon={ListOrdered}
       question={exercise.question}
-      instruction="Перетащите шаги в нужном порядке или передвигайте их стрелками"
+      instruction="Перетащите шаги в нужном порядке (на телефоне — нажмите на шаг и удерживайте) или передвигайте их стрелками"
       status={status}
       result={result}
       revealError={revealError}
@@ -177,6 +184,8 @@ export function OrderSteps({ exercise }: { exercise: PublicOrderSteps }) {
                   idPrefix={idPrefix}
                   text={stepText(id)}
                   position={index + 1}
+                  initialPosition={initialOrder.indexOf(id) + 1}
+                  wasMovedByUser={movedIds.has(id)}
                   total={total}
                   isUnchangedWarning={showUnchanged && !isChanged}
                   disabled={isLocked}
@@ -210,6 +219,8 @@ function SortableStep({
   idPrefix,
   text,
   position,
+  initialPosition,
+  wasMovedByUser,
   total,
   isUnchangedWarning,
   disabled,
@@ -221,7 +232,11 @@ function SortableStep({
   id: string;
   idPrefix: string;
   text: string;
+  // Место шага сейчас и в исходном порядке
   position: number;
+  initialPosition: number;
+  // Шаг двигали сами — тогда, если он не на исходном месте, подписываем «было N»
+  wasMovedByUser: boolean;
   total: number;
   isUnchangedWarning: boolean;
   disabled: boolean;
@@ -235,30 +250,43 @@ function SortableStep({
     useSortable({ id, disabled });
   const isFirst = position === 1;
   const isLast = position === total;
+  // Шаг двигали сами и он не на исходном месте — подписываем «было N», пока ответ не проверен
+  const isMoved = !disabled && wasMovedByUser && position !== initialPosition;
+  // Мышь берёт шаг только за ручку — случайный сдвиг мыши при клике по тексту не переставит
+  // шаг. Палец — в любом месте шага: долгое нажатие случайным не бывает, а искать ручку
+  // на телефоне неудобно. Обработчики библиотеки разделены по датчикам
+  // (onMouseDown — мышь, onTouchStart — палец). Библиотека типизирует их общим Function —
+  // уточняем тип события. При смене датчиков (useSensors выше) — пересмотреть этот список
+  const onMouseDown = listeners?.onMouseDown as React.MouseEventHandler | undefined;
+  const onTouchStart = listeners?.onTouchStart as React.TouchEventHandler | undefined;
 
   return (
     <li
       ref={setNodeRef}
+      onTouchStart={onTouchStart}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={`relative flex items-center gap-2 rounded-lg border p-2 transition-colors ${
         mark
           ? mark.box
           : isUnchangedWarning
             ? "border-accent bg-background ring-1 ring-accent"
-            : "border-border-strong bg-background"
-      } ${isDragging ? "z-10 shadow-lg" : ""}`}
+            : isMoved
+              ? "border-accent bg-background"
+              : "border-border-strong bg-background"
+      } ${isDragging ? "z-10 shadow-lg" : ""} ${
+        // На сенсорных экранах долгое нажатие на текст не выделяет его и не открывает меню
+        // телефона — берёт шаг. Мышью текст по-прежнему можно выделить
+        disabled ? "" : "touch-manipulation pointer-coarse:select-none [-webkit-touch-callout:none]"
+      }`}
     >
-      {/* Ручка: шаг тащат только за левый блок с точками и номером — так случайный сдвиг
-          мыши при клике по тексту не переставит шаг. Блок растянут на всю высоту карточки,
-          чтобы в него было легко попасть пальцем. Атрибуты библиотеки (role="button",
-          tabIndex) не ставим: с клавиатуры шаг двигают кнопками «выше / ниже». */}
+      {/* Ручка для мыши: левый блок с точками и номером, растянутый на всю высоту карточки.
+          Атрибуты библиотеки (role="button", tabIndex) не ставим: с клавиатуры шаг двигают
+          кнопками «выше / ниже». */}
       <span
         ref={setActivatorNodeRef}
-        {...listeners}
+        onMouseDown={onMouseDown}
         className={`-my-2 -ml-2 flex shrink-0 items-center gap-1.5 self-stretch py-2 pr-1 pl-2 ${
-          disabled
-            ? ""
-            : "cursor-grab touch-manipulation select-none [-webkit-touch-callout:none] active:cursor-grabbing"
+          disabled ? "" : "cursor-grab active:cursor-grabbing"
         }`}
       >
         {/* После проверки значок только прячем, а не убираем — чтобы текст шагов не сдвигался */}
@@ -273,7 +301,18 @@ function SortableStep({
       </span>
 
       <div className="min-w-0 flex-1">
-        <p>{text}</p>
+        <p>
+          {text}
+          {/* Номер слева — текущее место; подпись показывает, что шаг сдвинут и откуда */}
+          {isMoved && (
+            <>
+              <span aria-hidden="true" className="ml-1.5 text-sm text-subtle">
+                · было {initialPosition}
+              </span>
+              <span className="sr-only">, раньше был на месте {initialPosition}</span>
+            </>
+          )}
+        </p>
         {/* Разбор: шаг можно не трогать (он стоит верно относительно других и встанет
             на место, когда переставят остальные) или его нужно переставить — и куда */}
         {review && mark && (

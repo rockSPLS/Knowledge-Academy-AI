@@ -115,11 +115,8 @@ export function CostedSelect({ exercise }: { exercise: PublicCostedSelect }) {
       onRetry={retry}
       onReveal={revealAnswer}
     >
-      {review ? (
-        <Composition composition={review.composition} needed={review.needed} />
-      ) : (
-        <PromptSize used={used} max={maxTokens} />
-      )}
+      {/* Шкала размера остаётся и после раскрытия: видно, сколько набрано */}
+      <PromptSize used={used} max={maxTokens} />
 
       {/* Пустой выбор при проверке — подсвечиваем весь список одной рамкой, как в выборе ответа */}
       <ul
@@ -184,13 +181,20 @@ export function CostedSelect({ exercise }: { exercise: PublicCostedSelect }) {
           );
         })}
       </ul>
+
+      {/* Итог — под вариантами, рядом с итогом проверки: сначала разбор по вариантам, потом вывод */}
+      {review && (
+        <div className="mt-4">
+          <Composition composition={review.composition} needed={review.needed} />
+        </div>
+      )}
     </ExerciseShell>
   );
 }
 
 // ---------- Размер и состав промпта ----------
 
-// До проверки: сколько токенов набрано. Шкала — от размера «взять всё»
+// Сколько токенов набрано — до и после проверки. Шкала — от размера «взять всё»
 function PromptSize({ used, max }: { used: number; max: number }) {
   return (
     <div>
