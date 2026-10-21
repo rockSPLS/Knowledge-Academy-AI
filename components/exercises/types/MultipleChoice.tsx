@@ -16,12 +16,16 @@ import { useExercise } from "../useExercise";
 // Если верных несколько, отметить можно не больше их числа — но само число
 // заранее не показывается. Подсказка появляется, только если упереться в лимит.
 
-// Отметки разбора: общий стиль (reviewMarks) + подпись, своя для этого типа.
+// Отметки разбора: общий стиль (reviewMarks) + подписи, свои для этого типа.
+// Набора подписей два: «лишний / пропущен» подходят для выбора нескольких вариантов,
+// а при одном верном ответе понятнее «неверно / верный ответ».
 // Неотмеченные неверные варианты остаются без отметки.
-const STATUS_MARKS: Partial<Record<ChoiceOptionStatus, ReviewMark & { label: string }>> = {
-  correct: { ...REVIEW_MARKS.correct, label: "Верно" },
-  wrong: { ...REVIEW_MARKS.wrong, label: "Лишний" },
-  missed: { ...REVIEW_MARKS.missed, label: "Пропущен" },
+type StatusMark = ReviewMark & { label: { multiple: string; single: string } };
+
+const STATUS_MARKS: Partial<Record<ChoiceOptionStatus, StatusMark>> = {
+  correct: { ...REVIEW_MARKS.correct, label: { multiple: "Верно", single: "Верно" } },
+  wrong: { ...REVIEW_MARKS.wrong, label: { multiple: "Лишний", single: "Неверно" } },
+  missed: { ...REVIEW_MARKS.missed, label: { multiple: "Пропущен", single: "Верный ответ" } },
 };
 
 export function MultipleChoice({ exercise }: { exercise: PublicMultipleChoice }) {
@@ -144,7 +148,7 @@ export function MultipleChoice({ exercise }: { exercise: PublicMultipleChoice })
                   className={`inline-flex shrink-0 items-center gap-1 text-sm font-medium ${mark.text}`}
                 >
                   <mark.Icon size={16} aria-hidden="true" />
-                  {mark.label}
+                  {isMultiple ? mark.label.multiple : mark.label.single}
                 </span>
               )}
             </label>
