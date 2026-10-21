@@ -6,6 +6,11 @@
 // и плохо разбивается на одно путешествие
 export const MAX_SOURCE_LENGTH = 20_000;
 
+// Максимальный размер тела запроса к модели, байт. Проверяется до разбора JSON,
+// чтобы огромный запрос не читался в память целиком. С запасом: в JSON один символ
+// текста занимает до 6 байт (\uXXXX), плюс служебные поля
+export const MAX_REQUEST_BYTES = MAX_SOURCE_LENGTH * 6 + 1024;
+
 // «Мягкий» лимит частоты на один IP: столько запросов за окно
 export const RATE_LIMIT_PER_IP = 5;
 export const RATE_LIMIT_PER_IP_WINDOW_MS = 10 * 60 * 1000;

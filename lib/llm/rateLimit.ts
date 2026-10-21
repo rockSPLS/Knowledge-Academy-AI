@@ -56,10 +56,59 @@ function clientIp(request: Request): string {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
 }
 
+// Ключ лимита: для IPv4 — сам адрес, для IPv6 — сеть /64 (первые четыре группы).
+// Абонент IPv6 обычно получает целую сеть /64 и может менять адрес внутри неё
+// сколько угодно — лимит по одному адресу он бы просто обходил
+export function rateLimitKey(ip: string): string {
+  const address = ip.replace(/^\[|\]$/g, "");
+  // IPv4 с портом (1.2.3.4:5555 — так пишут некоторые прокси): порт не важен
+  const withPort = /^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/.exec(address);
+  if (withPort) return withPort[1];
+  if (!address.includes(":")) return address;
+  const groups = expandIPv6(address);
+  if (!groups) return address;
+  // IPv4, записанный как IPv6 (::ffff:1.2.3.4 в любой записи), — это обычный IPv4-адрес
+  if (groups.slice(0, 5).every((group) => group === "0") && groups[5] === "ffff") {
+    const [high, low] = [parseInt(groups[6], 16), parseInt(groups[7], 16)];
+    return [high >> 8, high & 255, low >> 8, low & 255].join(".");
+  }
+  return `${groups.slice(0, 4).join(":")}::/64`;
+}
+
+// Полная запись IPv6-адреса: восемь групп без ведущих нулей; null — адрес некорректен
+function expandIPv6(address: string): string[] | null {
+  const halves = address.split("%")[0].toLowerCase().split("::");
+  if (halves.length > 2) return null;
+  const parse = (part: string) => {
+    if (part === "") return [];
+    const groups = part.split(":");
+    // IPv4 в конце адреса (::ffff:1.2.3.4) — это две последние группы
+    const last = groups.at(-1) ?? "";
+    if (last.includes(".")) {
+      const parts = last.split(".");
+      // Некорректная часть не пройдёт проверку групп ниже
+      if (parts.length !== 4 || !parts.every((p) => /^\d{1,3}$/.test(p) && Number(p) <= 255)) {
+        return ["invalid"];
+      }
+      const [a, b, c, d] = parts.map(Number);
+      groups.splice(-1, 1, ((a << 8) | b).toString(16), ((c << 8) | d).toString(16));
+    }
+    return groups;
+  };
+  const head = parse(halves[0]);
+  const tail = halves.length === 2 ? parse(halves[1]) : [];
+  const missing = 8 - head.length - tail.length;
+  // Без «::» групп ровно восемь; «::» заменяет хотя бы одну нулевую группу
+  if (halves.length === 1 ? missing !== 0 : missing < 1) return null;
+  const groups = [...head, ...Array<string>(halves.length === 2 ? missing : 0).fill("0"), ...tail];
+  if (!groups.every((group) => /^[0-9a-f]{1,4}$/.test(group))) return null;
+  return groups.map((group) => parseInt(group, 16).toString(16));
+}
+
 // Учитывает запрос к модели. Считаются все запросы, даже некорректные:
 // лимит защищает и от простого засыпания сервера запросами
 export function consumeModelRequest(request: Request): RateLimitResult {
-  const byIp = perIp(clientIp(request));
+  const byIp = perIp(rateLimitKey(clientIp(request)));
   if (!byIp.ok) return byIp;
   return allClients("all");
 }

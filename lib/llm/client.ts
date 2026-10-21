@@ -37,12 +37,15 @@ export async function generateStructured<T>({
   prompt,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   maxOutputTokens = DEFAULT_MAX_OUTPUT_TOKENS,
+  abortSignal,
 }: {
   schema: z.ZodType<T>;
   system: string;
   prompt: string;
   timeoutMs?: number;
   maxOutputTokens?: number;
+  // Отмена запроса: посетитель закрыл страницу или запрос больше не нужен
+  abortSignal?: AbortSignal;
 }): Promise<ModelResult<T>> {
   const config = readConfig();
   if (!config) return { ok: false, reason: "not-configured" };
@@ -65,9 +68,12 @@ export async function generateStructured<T>({
       prompt,
       timeout: timeoutMs,
       maxOutputTokens,
+      abortSignal,
     });
     return { ok: true, data: output };
   } catch (error) {
+    // Запрос отменили сами — это не сбой модели, в лог не пишем
+    if (abortSignal?.aborted) return { ok: false, reason: "unavailable" };
     if (NoObjectGeneratedError.isInstance(error)) {
       // finishReason показывает, обрезан ли ответ по длине (length) или модель остановилась сама
       console.error(`[model] ответ модели не подошёл под схему (finishReason: ${error.finishReason ?? "?"})`);

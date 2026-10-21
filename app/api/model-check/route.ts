@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { generateStructured } from "@/lib/llm/client";
-import { MAX_SOURCE_LENGTH } from "@/lib/llm/limits";
+import { MAX_REQUEST_BYTES, MAX_SOURCE_LENGTH } from "@/lib/llm/limits";
 import { consumeModelRequest } from "@/lib/llm/rateLimit";
+import { readJsonBody } from "@/lib/llm/request";
 import { modelFailureResponse, rateLimitedResponse } from "@/lib/llm/responses";
 
 // POST /api/model-check — проверка подключения модели, только при разработке.
@@ -27,17 +28,10 @@ export async function POST(request: Request) {
   const limit = consumeModelRequest(request);
   if (!limit.ok) return rateLimitedResponse(limit.retryAfterSec);
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json(
-      { code: "bad-request", error: "Тело запроса должно быть JSON" },
-      { status: 400 },
-    );
-  }
+  const body = await readJsonBody(request, MAX_REQUEST_BYTES);
+  if (!body.ok) return body.response;
 
-  const parsed = requestSchema.safeParse(body);
+  const parsed = requestSchema.safeParse(body.data);
   if (!parsed.success) {
     return Response.json(
       {
