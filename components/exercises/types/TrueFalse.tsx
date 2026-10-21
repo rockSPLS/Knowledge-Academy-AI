@@ -26,12 +26,12 @@ export function TrueFalse({ exercise }: { exercise: PublicTrueFalse }) {
     Object.hasOwn(answers, statement.id),
   );
   // Черновик для теста: ответ готов, когда оценены все утверждения
-  const { status, result, revealError, submit, revealAnswer, reset, mode } =
+  const { status, result, revealError, submit, revealAnswer, reset, mode, locked } =
     useExercise<TrueFalseAnswer>(exercise.id, {
       answer: isComplete ? { answers } : null,
       touched: Object.keys(answers).length > 0,
     });
-  const isLocked = status !== "idle" && status !== "error";
+  const isLocked = locked;
 
   const details = result?.review?.details;
   const review: TrueFalseReview | null = details?.type === "true-false" ? details : null;

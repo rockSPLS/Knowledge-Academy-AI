@@ -21,12 +21,12 @@ export function FillBlank({ exercise }: { exercise: PublicFillBlank }) {
   const [showMissing, setShowMissing] = useState(false);
   const isComplete = blankIds.every((id) => (values[id] ?? "").trim() !== "");
   // Черновик для теста: ответ готов, когда заполнены все пропуски
-  const { status, result, revealError, submit, revealAnswer, reset, mode } =
+  const { status, result, revealError, submit, revealAnswer, reset, mode, locked } =
     useExercise<FillBlankAnswer>(exercise.id, {
       answer: isComplete ? { blanks: values } : null,
       touched: blankIds.some((id) => (values[id] ?? "").trim() !== ""),
     });
-  const isLocked = status !== "idle" && status !== "error";
+  const isLocked = locked;
 
   function handleSubmit() {
     if (!isComplete) {

@@ -70,12 +70,12 @@ export function MatchPairs({ exercise }: { exercise: PublicMatchPairs }) {
 
   const isComplete = exercise.terms.every((term) => Object.hasOwn(placed, term.id));
   // Черновик для теста: ответ готов, когда заполнены все пары
-  const { status, result, revealError, submit, revealAnswer, reset, mode } =
+  const { status, result, revealError, submit, revealAnswer, reset, mode, locked } =
     useExercise<MatchPairsAnswer>(exercise.id, {
       answer: isComplete ? { matches: placed } : null,
       touched: Object.keys(placed).length > 0,
     });
-  const isLocked = status !== "idle" && status !== "error";
+  const isLocked = locked;
   // Выбор нажатием показываем, только пока ответ можно менять
   const shownSelected = isLocked ? null : selected;
   // Стопка — определения, которые ещё не стоят в ячейках (в авторском порядке)

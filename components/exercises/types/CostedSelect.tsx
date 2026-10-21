@@ -56,12 +56,12 @@ export function CostedSelect({ exercise }: { exercise: PublicCostedSelect }) {
     .filter((option) => selected.has(option.id))
     .map((option) => option.id);
   // Черновик для теста: ответ готов, если выбрано хоть что-то
-  const { status, result, revealError, submit, revealAnswer, reset, mode } =
+  const { status, result, revealError, submit, revealAnswer, reset, mode, locked } =
     useExercise<CostedSelectAnswer>(exercise.id, {
       answer: selectedInOrder.length > 0 ? { selected: selectedInOrder } : null,
       touched: selectedInOrder.length > 0,
     });
-  const isLocked = status !== "idle" && status !== "error";
+  const isLocked = locked;
 
   const used = exercise.options
     .filter((option) => selected.has(option.id))

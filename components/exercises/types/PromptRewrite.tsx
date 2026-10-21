@@ -30,12 +30,12 @@ export function PromptRewrite({ exercise }: { exercise: PublicPromptRewrite }) {
   // (та же нормализация, что на сервере)
   const isRewritten =
     normalizeText(text) !== "" && normalizeText(text) !== normalizeText(exercise.weakPrompt);
-  const { status, result, revealError, submit, revealAnswer, reset, mode } =
+  const { status, result, revealError, submit, revealAnswer, reset, mode, locked } =
     useExercise<PromptRewriteAnswer>(exercise.id, {
       answer: isRewritten ? { text } : null,
       touched: isRewritten,
     });
-  const isLocked = status !== "idle" && status !== "error";
+  const isLocked = locked;
 
   const details = result?.review?.details;
   const review: PromptRewriteReview | null = details?.type === "prompt-rewrite" ? details : null;

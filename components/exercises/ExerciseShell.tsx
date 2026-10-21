@@ -1,16 +1,25 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { CircleCheck, CircleMinus, CircleX, TriangleAlert, type LucideIcon } from "lucide-react";
+import {
+  CircleCheck,
+  CircleMinus,
+  CircleX,
+  Clock,
+  Lightbulb,
+  TriangleAlert,
+  type LucideIcon,
+} from "lucide-react";
 import type { CheckResult, Verdict } from "@/lib/exercises/types";
 import { useTestContext } from "@/components/test/TestContext";
+import { useJourneyExercise } from "@/components/journey/JourneyExerciseContext";
 import type { ExerciseMode, ExerciseStatus } from "./useExercise";
 
 // Итог всегда обозначается значком и словом, а не только цветом —
 // так его различают и люди, которые плохо различают цвета (требование доступности WCAG).
 // Зелёный, янтарный и красный зарезервированы за итогами и больше нигде не используются —
 // поэтому технические ошибки (нет сети) оформлены нейтрально, чтобы их не путали с «Неверно».
-const VERDICTS: Record<Verdict, { Icon: LucideIcon; label: string; className: string }> = {
+export const VERDICTS: Record<Verdict, { Icon: LucideIcon; label: string; className: string }> = {
   correct: { Icon: CircleCheck, label: "Верно", className: "text-success" },
   partial: { Icon: CircleMinus, label: "Частично верно", className: "text-warning" },
   incorrect: { Icon: CircleX, label: "Неверно", className: "text-danger" },
@@ -31,6 +40,8 @@ const REVEAL_BUTTON = `${SECONDARY_BUTTON} border-border-strong bg-background ho
 // В тесте своей кнопки у упражнения нет: все ответы отправляет «Завершить тест»
 // (components/test/TestParts.tsx), а карточка подсвечивается, если вопрос пропущен
 // или не заполнен при попытке завершить.
+// В путешествии карточка — как в статье, плюс кнопка «Подсказка», не больше двух попыток
+// и итог «Время вышло», если ответ не успели дать (components/journey/).
 
 // Подписи к подсветке в тесте
 const TEST_NOTICES = {
@@ -92,9 +103,12 @@ export function ExerciseShell({
   // и после раскрытия ответа, чтобы клавиатура и экранный диктор не «потерялись».
   // В тесте — никогда: итоги появляются во всех карточках сразу, и фокус берёт
   // итоговая сводка, где бы она ни стояла на странице.
+  // В путешествии, когда время вышло, — тоже: итоги появляются во всех карточках разом.
+  const journey = useJourneyExercise();
+  const isTimeUp = journey?.isTimeUp ?? false;
   useEffect(() => {
-    if (mode === "inline" && result) resultRef.current?.focus();
-  }, [mode, result]);
+    if (mode === "inline" && result && !isTimeUp) resultRef.current?.focus();
+  }, [mode, result, isTimeUp]);
 
   // Тест: пропущен ли вопрос или не заполнен при попытке завершить (после завершения — нет)
   const test = useTestContext();
@@ -109,8 +123,13 @@ export function ExerciseShell({
 
   const verdict = result ? VERDICTS[result.verdict] : null;
   // Повтор и раскрытие имеют смысл, только пока ответ не раскрыт:
-  // после верного ответа и после «Показать ответ» кнопок нет
-  const canRetryOrReveal = mode === "inline" && result !== null && !result.review;
+  // после верного ответа и после «Показать ответ» кнопок нет.
+  // В путешествии, когда время вышло, разбор раскрывается сам
+  const canRetryOrReveal = mode === "inline" && result !== null && !result.review && !isTimeUp;
+  const isSkipped = status === "skipped";
+  // Путешествие: итог упражнения записан — ответ больше не меняется
+  const outcome = journey?.outcomeFor(exerciseId);
+  const isSecondAttempt = outcome !== undefined && outcome.attempts > 1;
 
   return (
     // В тесте data-exercise-id и tabIndex — чтобы тест мог прокрутить к незаполненному вопросу
@@ -155,9 +174,22 @@ export function ExerciseShell({
         <div className="mt-4">{children}</div>
       </fieldset>
 
+      {journey && (
+        <JourneyHint
+          exerciseId={exerciseId}
+          canRequest={!result?.review && !isSkipped && !isTimeUp}
+        />
+      )}
+
       <div className="mt-4 space-y-3">
-        {/* В тесте ответы отправляет общая кнопка «Завершить тест» */}
-        {mode === "inline" && !isAnswered && (
+        {/* В тесте ответы отправляет общая кнопка «Завершить тест»;
+            в путешествии после конца времени ответы отправляются сами */}
+        {/* Путешествие: первая попытка уже потрачена (например, до перезагрузки страницы) */}
+        {journey && !isAnswered && !isSkipped && !isTimeUp && !outcome &&
+          journey.attemptsUsed(exerciseId) >= 1 && (
+            <p className="text-sm text-muted">Последняя попытка — после неё откроется разбор.</p>
+          )}
+        {mode === "inline" && !isAnswered && !isSkipped && !isTimeUp && (
           <button
             type="button"
             onClick={() => {
@@ -173,7 +205,7 @@ export function ExerciseShell({
         )}
 
         {/* Нейтральное оформление: красный и янтарный закреплены за итогами */}
-        {validationMessage && !isAnswered && (
+        {validationMessage && !isAnswered && !isSkipped && !isTimeUp && (
           <p key={submitAttempt} role="alert" className="inline-flex items-center gap-1.5 text-sm">
             <TriangleAlert size={16} aria-hidden="true" className="text-accent" />
             {validationMessage}
@@ -206,6 +238,9 @@ export function ExerciseShell({
               <p className={`inline-flex items-center gap-1.5 font-semibold ${verdict.className}`}>
                 <verdict.Icon size={18} aria-hidden="true" />
                 {verdict.label}
+                {isSecondAttempt && result.review && (
+                  <span className="font-normal text-muted">· со второй попытки</span>
+                )}
               </p>
             </div>
             {result.hint && <p>{result.hint}</p>}
@@ -231,6 +266,11 @@ export function ExerciseShell({
 
             {canRetryOrReveal && (
               <div className="flex flex-wrap gap-2 pt-1">
+                {journey && (
+                  <p className="w-full text-muted">
+                    Осталась ещё одна попытка.
+                  </p>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -256,7 +296,87 @@ export function ExerciseShell({
             )}
           </div>
         )}
+
+        {/* Путешествие: время вышло, ответа нет — итог первой попытки или «не успели» */}
+        {isSkipped && outcome && (
+          <div className="space-y-2 text-sm">
+            <p className="inline-flex items-center gap-1.5 font-semibold text-muted">
+              <Clock size={18} aria-hidden="true" />
+              {outcome.skipped ? "Время вышло — ответа нет" : "Время вышло — засчитана первая попытка"}
+            </p>
+            {!outcome.skipped && (
+              <p className={`font-semibold ${VERDICTS[outcome.verdict].className}`}>
+                {VERDICTS[outcome.verdict].label}
+              </p>
+            )}
+            <p className="text-muted">{outcome.explanation}</p>
+          </div>
+        )}
       </div>
     </section>
+  );
+}
+
+// Подсказка в путешествии: открывается по кнопке (цена в очках появится вместе с очками).
+// Открытая подсказка остаётся видна и после ответа
+function JourneyHint({ exerciseId, canRequest }: { exerciseId: string; canRequest: boolean }) {
+  const journey = useJourneyExercise();
+  const [state, setState] = useState<"idle" | "loading" | "error" | "opened">("idle");
+  const hintRef = useRef<HTMLParagraphElement>(null);
+  const hint = journey?.hintFor(exerciseId);
+
+  // Кнопка исчезает — фокус на текст подсказки, чтобы клавиатура не «потерялась»
+  useEffect(() => {
+    if (hint && state === "opened") hintRef.current?.focus();
+  }, [hint, state]);
+
+  if (!journey) return null;
+
+  if (hint) {
+    return (
+      <p
+        ref={hintRef}
+        tabIndex={-1}
+        className="mt-4 flex items-start gap-2 rounded-lg bg-accent-soft p-3 text-sm text-accent-soft-foreground outline-none"
+      >
+        <Lightbulb size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
+        <span>
+          <span className="font-medium">Подсказка: </span>
+          {hint}
+        </span>
+      </p>
+    );
+  }
+  if (!canRequest) return null;
+
+  async function open() {
+    if (!journey || state === "loading") return;
+    setState("loading");
+    try {
+      await journey.requestHint(exerciseId);
+      setState("opened");
+    } catch {
+      setState("error");
+    }
+  }
+
+  return (
+    <div className="mt-4 space-y-2">
+      <button
+        type="button"
+        onClick={open}
+        aria-disabled={state === "loading"}
+        className={`inline-flex items-center gap-1.5 ${REVEAL_BUTTON}`}
+      >
+        <Lightbulb size={16} aria-hidden="true" />
+        {state === "loading" ? "Загружаю подсказку…" : "Подсказка"}
+      </button>
+      {state === "error" && (
+        <p role="alert" className="flex items-center gap-1.5 text-sm">
+          <TriangleAlert size={16} aria-hidden="true" className="text-muted" />
+          Не удалось загрузить подсказку. Попробуйте ещё раз.
+        </p>
+      )}
+    </div>
   );
 }

@@ -64,12 +64,12 @@ export function OrderSteps({ exercise }: { exercise: PublicOrderSteps }) {
   // не проверяем — иначе баллы можно получить за чужую перестановку.
   const isChanged = order.some((id, index) => id !== initialOrder[index]);
   // Черновик для теста: ответ готов, когда шаги переставлены
-  const { status, result, revealError, submit, revealAnswer, reset, mode } =
+  const { status, result, revealError, submit, revealAnswer, reset, mode, locked } =
     useExercise<OrderStepsAnswer>(exercise.id, {
       answer: isChanged ? { order } : null,
       touched: isChanged,
     });
-  const isLocked = status !== "idle" && status !== "error";
+  const isLocked = locked;
   const total = order.length;
 
   const details = result?.review?.details;

@@ -33,12 +33,12 @@ export function MultipleChoice({ exercise }: { exercise: PublicMultipleChoice })
   const groupName = useId();
   const firstOptionRef = useRef<HTMLInputElement>(null);
   // Черновик для теста: ответ готов, если выбран хотя бы один вариант
-  const { status, result, revealError, submit, revealAnswer, reset, mode } =
+  const { status, result, revealError, submit, revealAnswer, reset, mode, locked } =
     useExercise<MultipleChoiceAnswer>(exercise.id, {
       answer: selected.length > 0 ? { selected } : null,
       touched: selected.length > 0,
     });
-  const isLocked = status !== "idle" && status !== "error";
+  const isLocked = locked;
   const isMultiple = exercise.maxSelections > 1;
   // Разбор по вариантам — есть, только если сервер раскрыл ответ
   const details = result?.review?.details;
