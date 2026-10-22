@@ -17,6 +17,21 @@ export function modelFailureResponse(reason: ModelFailure): Response {
   return Response.json({ code: reason, error: UNAVAILABLE_MESSAGE }, { status: 503 });
 }
 
+// Свободный ответ не удалось оценить. code у обоих — judge-failed: интерфейс
+// предлагает попробовать ещё раз или пропустить упражнение без оценки
+export function judgeFailureResponse(reason: ModelFailure): Response {
+  const error =
+    reason === "invalid-output"
+      ? "Не получилось оценить ответ. Попробуйте ещё раз."
+      : reason === "not-configured"
+        ? "Оценка ответов не настроена — пропустите упражнение без оценки."
+        : "Оценка ответа сейчас недоступна. Попробуйте ещё раз через минуту.";
+  return Response.json(
+    { code: "judge-failed", error },
+    { status: reason === "invalid-output" ? 502 : 503 },
+  );
+}
+
 export function rateLimitedResponse(retryAfterSec: number): Response {
   const minutes = Math.ceil(retryAfterSec / 60);
   return Response.json(

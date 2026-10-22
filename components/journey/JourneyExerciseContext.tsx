@@ -17,8 +17,9 @@ export type JourneyExerciseApi = {
   // Запоминает попытку (номер или "same" — раскрытие ответа, не новая попытка);
   // если в результате есть разбор — это итог упражнения
   recordCheck: (exerciseId: string, result: CheckResult, attempt: number | "same") => void;
-  // Время вышло, а ответа нет: запрашивает объяснение и записывает итог «не успели»
-  skip: (exerciseId: string) => Promise<void>;
+  // Время вышло, а ответа нет: запрашивает объяснение и записывает итог «не успели».
+  // unrated — свободный ответ пропущен без оценки, потому что модель недоступна
+  skip: (exerciseId: string, unrated?: boolean) => Promise<void>;
   outcomeFor: (exerciseId: string) => ExerciseOutcome | undefined;
   hintFor: (exerciseId: string) => string | undefined;
   requestHint: (exerciseId: string) => Promise<void>;

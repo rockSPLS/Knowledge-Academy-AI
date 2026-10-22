@@ -11,7 +11,7 @@ export const MAX_SOURCE_LENGTH = 20_000;
 // текста занимает до 6 байт (\uXXXX), плюс служебные поля
 export const MAX_REQUEST_BYTES = MAX_SOURCE_LENGTH * 6 + 1024;
 
-// «Мягкий» лимит частоты на один IP: столько запросов за окно
+// «Мягкий» лимит частоты генерации на один IP: столько путешествий за окно
 export const RATE_LIMIT_PER_IP = 5;
 export const RATE_LIMIT_PER_IP_WINDOW_MS = 10 * 60 * 1000;
 
@@ -19,3 +19,11 @@ export const RATE_LIMIT_PER_IP_WINDOW_MS = 10 * 60 * 1000;
 // с множества разных IP
 export const RATE_LIMIT_GLOBAL = 60;
 export const RATE_LIMIT_GLOBAL_WINDOW_MS = 60 * 60 * 1000;
+
+// Лимит оценки свободных ответов — свой счётчик, отдельно от генерации: в путешествии
+// не больше двух свободных ответов по две попытки, то есть до 4 оценок
+// («Показать ответ» модель не вызывает). Лимиты — это лимиты генерации × 4:
+// любое разрешённое путешествие можно пройти целиком, не упираясь в лимит на полпути
+const EVALUATIONS_PER_JOURNEY = 4;
+export const EVALUATION_LIMIT_PER_IP = RATE_LIMIT_PER_IP * EVALUATIONS_PER_JOURNEY;
+export const EVALUATION_LIMIT_GLOBAL = RATE_LIMIT_GLOBAL * EVALUATIONS_PER_JOURNEY;

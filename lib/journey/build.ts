@@ -1,6 +1,7 @@
 import "server-only";
 import { randomInt } from "node:crypto";
 import { validateExercise } from "@/lib/exercises/server";
+import { FREE_ANSWER_CRITERIA_MAX, FREE_ANSWER_CRITERIA_MIN } from "@/lib/exercises/limits";
 import { normalizeText } from "@/lib/exercises/text";
 import type { Exercise } from "@/lib/exercises/types";
 import type {
@@ -24,6 +25,9 @@ const EXERCISES_MAX = 3;
 const DOUBTS_MAX = 3;
 // Разных типов упражнений во всём путешествии — не меньше
 const JOURNEY_TYPES_MIN = 3;
+// Свободных ответов во всём путешествии — не больше: каждый занимает 2–3 минуты
+// и одну-две оценки моделью (под это рассчитан лимит оценки в lib/llm/limits.ts)
+export const FREE_ANSWERS_MAX = 2;
 // Потолок длины любой строки в ответе модели: защита от «простыней» и зацикливания
 const MAX_TEXT_LENGTH = 1500;
 // Допустимый ответ в пропуске не длиннее того, что можно ввести в поле
@@ -51,6 +55,19 @@ export function checkPlan(plan: Plan): string | null {
   if (types.size < JOURNEY_TYPES_MIN) {
     return `во всём путешествии должно быть не меньше ${JOURNEY_TYPES_MIN} разных типов упражнений`;
   }
+  const freeAnswers = plan.checkpoints.filter((checkpoint) =>
+    checkpoint.exerciseTypes.includes("free-answer"),
+  ).length;
+  if (freeAnswers > FREE_ANSWERS_MAX) {
+    return `free-answer — не больше чем в ${FREE_ANSWERS_MAX} чекпоинтах путешествия`;
+  }
+  // Свободные ответы одного путешествия — разных видов
+  const kinds = plan.checkpoints
+    .map((checkpoint) => checkpoint.freeAnswerKind)
+    .filter((kind) => kind !== "none");
+  if (new Set(kinds).size !== kinds.length) {
+    return "у свободных ответов в путешествии должны быть разные виды (freeAnswerKind)";
+  }
   return null;
 }
 
@@ -70,6 +87,13 @@ function checkPlanCheckpoint(checkpoint: PlanCheckpoint, number: number): string
     return `нужно ${EXERCISES_MIN}–${EXERCISES_MAX} типа упражнений`;
   }
   if (new Set(types).size !== types.length) return "типы упражнений в чекпоинте повторяются";
+  if (types.includes("free-answer") === (checkpoint.freeAnswerKind === "none")) {
+    return "freeAnswerKind — вид свободного ответа, если в exerciseTypes есть free-answer, иначе none";
+  }
+  // «Объясните другу» строится на заблуждении из карточки — без него модели не на что опереться
+  if (checkpoint.freeAnswerKind === "friend" && !checkpoint.misconceptions.some((item) => !isBlank(item))) {
+    return "freeAnswerKind friend — только если в misconceptions есть заблуждение";
+  }
   return null;
 }
 
@@ -111,7 +135,7 @@ export function buildCheckpoint(
   const id = checkpointId(number);
   const exercises: JourneyExercise[] = [];
   for (const [index, item] of list.entries()) {
-    const built = buildExercise(item, `${id}-${index + 1}`);
+    const built = buildExercise(item, `${id}-${index + 1}`, planned);
     if (!built.ok) return { ok: false, error: `упражнение ${index + 1} (${item.type}): ${built.error}` };
     exercises.push(built.value);
   }
@@ -134,12 +158,16 @@ export function buildCheckpoint(
 
 // ---------- Упражнение ----------
 
-function buildExercise(item: GeneratedExercise, id: string): BuildResult<JourneyExercise> {
+function buildExercise(
+  item: GeneratedExercise,
+  id: string,
+  planned: PlanCheckpoint,
+): BuildResult<JourneyExercise> {
   if (![1, 2, 3].includes(item.difficulty)) return { ok: false, error: "сложность — 1, 2 или 3" };
   if ([item.hint, item.question, item.explanation].some(isBlank)) {
     return { ok: false, error: "пустая подсказка, вопрос или объяснение" };
   }
-  const built = buildExerciseBody(item, id);
+  const built = buildExerciseBody(item, id, planned);
   if (!built.ok) return built;
   // Та же проверка целостности, что у упражнений банка
   const error = validateExercise(built.value);
@@ -154,7 +182,11 @@ function buildExercise(item: GeneratedExercise, id: string): BuildResult<Journey
   };
 }
 
-function buildExerciseBody(item: GeneratedExercise, id: string): BuildResult<Exercise> {
+function buildExerciseBody(
+  item: GeneratedExercise,
+  id: string,
+  planned: PlanCheckpoint,
+): BuildResult<Exercise> {
   const question = item.question.trim();
   const explanation = item.explanation.trim();
   switch (item.type) {
@@ -277,6 +309,30 @@ function buildExerciseBody(item: GeneratedExercise, id: string): BuildResult<Exe
         question,
         steps: withIds.map((step) => ({ id: step.id, text: step.text.trim() })),
         correct,
+        explanation,
+      });
+    }
+
+    case "free-answer": {
+      const criteria = item.criteria.map((criterion) => criterion.trim());
+      if (criteria.length < FREE_ANSWER_CRITERIA_MIN || criteria.length > FREE_ANSWER_CRITERIA_MAX) {
+        return fail(`нужно от ${FREE_ANSWER_CRITERIA_MIN} до ${FREE_ANSWER_CRITERIA_MAX} критериев`);
+      }
+      if (criteria.some((criterion) => criterion === "") || hasDuplicates(criteria)) {
+        return fail("критерии пустые или повторяются");
+      }
+      if (isBlank(item.sample)) return fail("нужен образец ответа");
+      // Вид задания — из плана. checkPlan уже проверил, что он задан, — ветка ниже
+      // только защита (и сужение типа), модели шага 2 эта ошибка не адресована
+      const kind = planned.freeAnswerKind;
+      if (kind === "none") return fail("в плане не задан вид свободного ответа");
+      return ok({
+        id,
+        type: "free-answer",
+        kind,
+        question,
+        criteria: criteria.map((text, index) => ({ id: `k${index + 1}`, text })),
+        sample: item.sample.trim(),
         explanation,
       });
     }

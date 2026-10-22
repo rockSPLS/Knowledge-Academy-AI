@@ -1,5 +1,8 @@
 import "server-only";
+import { normalizeText } from "@/lib/exercises/text";
 import type { AskModel } from "./generate";
+import type { AskJudge } from "./judge";
+import type { Journey } from "./types";
 import dough from "./fixtures/dough.json";
 import inflation from "./fixtures/inflation.json";
 import photosynthesis from "./fixtures/photosynthesis.json";
@@ -10,16 +13,26 @@ import photosynthesis from "./fixtures/photosynthesis.json";
 // модель ответила не по схеме, "unavailable" — модель была недоступна.
 // Ответы проходят те же проверки и ту же сборку,
 // что и настоящие, поэтому на них видно, как работают проверки и повтор.
+// judge — ответы оценщика свободных ответов: на какой ответ пользователя что ответила модель.
+
+export type JudgeFixture = {
+  exerciseId: string;
+  answer: string;
+  // Ответы модели по попыткам, как в plan и checkpoints
+  responses: unknown[];
+};
 
 export type Fixture = {
   description: string;
   source: string;
   plan: unknown[];
   checkpoints: unknown[][];
+  judge?: JudgeFixture[];
 };
 
 // photosynthesis — пример, составленный вручную; первая попытка упражнений
-// второго чекпоинта в нём намеренно ошибочна (проверка повтора).
+// второго чекпоинта в нём намеренно ошибочна (проверка повтора), а в первом
+// и втором чекпоинтах есть свободные ответы с сохранёнными оценками.
 // inflation и dough — настоящие ответы модели по теме и по тексту; что в них
 // проверяется — в поле description
 export const fixtures: Record<string, Fixture> = {
@@ -55,4 +68,41 @@ export function recordingModel(inner: AskModel, into: Pick<Fixture, "plan" | "ch
     }
     return result;
   };
+}
+
+// «Оценщик», который отвечает сохранёнными оценками. Ответ пользователя сверяется
+// мягко (регистр, «ё», пробелы); на незнакомый ответ «модель недоступна» —
+// так при разработке виден и запасной путь
+export function replayJudge(fixture: Fixture): AskJudge {
+  const used = new Map<string, number>();
+  return async ({ exercise, answer, schema }) => {
+    const entry = fixture.judge?.find(
+      (item) => item.exerciseId === exercise.id && normalizeText(item.answer) === normalizeText(answer),
+    );
+    if (!entry) return { ok: false, reason: "unavailable" };
+    const key = `${entry.exerciseId}\n${entry.answer}`;
+    const index = used.get(key) ?? 0;
+    used.set(key, index + 1);
+    const attempt = entry.responses[index] ?? null;
+    if (attempt === "unavailable") return { ok: false, reason: "unavailable" };
+    const parsed = schema.safeParse(attempt);
+    return parsed.success ? { ok: true, data: parsed.data } : { ok: false, reason: "invalid-output" };
+  };
+}
+
+// Обёртка над настоящим оценщиком: запоминает его ответы в формате JudgeFixture
+export function recordingJudge(inner: AskJudge, into: unknown[]): AskJudge {
+  return async (request) => {
+    const result = await inner(request);
+    into.push(result.ok ? result.data : result.reason === "invalid-output" ? null : result.reason);
+    return result;
+  };
+}
+
+// Только при разработке: путешествие из сохранённых ответов оценивается по ним же,
+// без запросов к модели. На опубликованном сайте — всегда настоящий оценщик
+export function fixtureJudge(journey: Journey): AskJudge | null {
+  if (process.env.NODE_ENV === "production" || !journey.fixture) return null;
+  const fixture = fixtures[journey.fixture];
+  return fixture ? replayJudge(fixture) : null;
 }

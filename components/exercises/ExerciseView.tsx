@@ -1,11 +1,15 @@
 "use client";
 
-import type { PublicExercise } from "@/lib/exercises/types";
+import type { PublicExercise, PublicFreeAnswer } from "@/lib/exercises/types";
 import { CostedSelect } from "./types/CostedSelect";
+import { ExplainAnswer } from "./types/ExplainAnswer";
+import { ExplainSimply } from "./types/ExplainSimply";
+import { ExplainToFriend } from "./types/ExplainToFriend";
 import { FillBlank } from "./types/FillBlank";
 import { MatchPairs } from "./types/MatchPairs";
 import { MultipleChoice } from "./types/MultipleChoice";
 import { OrderSteps } from "./types/OrderSteps";
+import { OwnExample } from "./types/OwnExample";
 import { PromptRewrite } from "./types/PromptRewrite";
 import { TrueFalse } from "./types/TrueFalse";
 
@@ -29,5 +33,21 @@ export function ExerciseView({ exercise }: { exercise: PublicExercise }): React.
       return <CostedSelect exercise={exercise} />;
     case "prompt-rewrite":
       return <PromptRewrite exercise={exercise} />;
+    case "free-answer":
+      return <FreeAnswerView exercise={exercise} />;
+  }
+}
+
+// Свободный ответ: у каждого вида задания свой компонент
+function FreeAnswerView({ exercise }: { exercise: PublicFreeAnswer }): React.ReactElement {
+  switch (exercise.kind) {
+    case "explain":
+      return <ExplainAnswer exercise={exercise} />;
+    case "simple":
+      return <ExplainSimply exercise={exercise} />;
+    case "friend":
+      return <ExplainToFriend exercise={exercise} />;
+    case "example":
+      return <OwnExample exercise={exercise} />;
   }
 }

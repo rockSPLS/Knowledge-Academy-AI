@@ -27,6 +27,9 @@ export type ExerciseOutcome = {
   explanation: string;
   // Время вышло, а ответа не было
   skipped: boolean;
+  // Свободный ответ не удалось оценить (модель недоступна) — пропущен без оценки.
+  // Если первая попытка была, засчитана она, иначе skipped = true
+  unrated?: boolean;
 };
 
 // Прохождение чекпоинта: deadline — момент окончания времени (мс с 1970 г.);
@@ -69,8 +72,8 @@ export type JourneyAction =
       explanation?: string;
       now: number;
     }
-  // Время вышло, а ответа нет
-  | { type: "skipped"; exerciseId: string; explanation: string; now: number }
+  // Время вышло, а ответа нет; unrated — свободный ответ пропущен без оценки
+  | { type: "skipped"; exerciseId: string; explanation: string; unrated: boolean; now: number }
   | { type: "hint"; exerciseId: string; hint: string }
   | { type: "finish" }
   | { type: "discard" };
@@ -131,6 +134,7 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
         attempts: last?.count ?? 0,
         explanation: action.explanation,
         skipped: last === undefined,
+        ...(action.unrated && { unrated: true }),
       });
     }
     case "hint":
@@ -201,6 +205,7 @@ const KNOWN_TYPES = new Set([
   "order-steps",
   "costed-select",
   "prompt-rewrite",
+  "free-answer",
 ]);
 
 const VERDICTS = new Set(["correct", "partial", "incorrect"]);
@@ -222,7 +227,8 @@ const isOutcome = (o: unknown) =>
   typeof o.score === "number" &&
   VERDICTS.has(o.verdict as string) &&
   typeof o.explanation === "string" &&
-  typeof o.skipped === "boolean";
+  typeof o.skipped === "boolean" &&
+  (o.unrated === undefined || typeof o.unrated === "boolean");
 
 // Проверка сохранённого прогресса: страница не должна падать на испорченных данных.
 // Поля самих упражнений не проверяются — при смене формата повышается version

@@ -12,6 +12,14 @@ export const MAX_ANSWER_ITEMS = 20;
 // Общая для поля ввода в браузере и для схемы запроса на сервере
 export const MAX_PROMPT_LENGTH = 2000;
 
+// Максимальная длина свободного ответа: хватает на несколько абзацев объяснения.
+// Общая для поля ввода в браузере и для схемы запроса на сервере
+export const MAX_FREE_ANSWER_LENGTH = 1000;
+
+// Сколько критериев у свободного ответа — и для генерации, и для проверки упражнения
+export const FREE_ANSWER_CRITERIA_MIN = 2;
+export const FREE_ANSWER_CRITERIA_MAX = 3;
+
 // Проверка id элемента упражнения для банка; возвращает текст ошибки или null
 export function validateItemIds(ids: string[], what: string): string | null {
   if (ids.some((id) => id.length === 0 || id.length > MAX_ID_LENGTH)) {

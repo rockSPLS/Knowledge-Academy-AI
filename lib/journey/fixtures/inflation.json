@@ -28,7 +28,8 @@
           "exerciseTypes": [
             "multiple-choice",
             "fill-blank"
-          ]
+          ],
+          "freeAnswerKind": "none"
         },
         {
           "title": "Причины: спрос и издержки",
@@ -52,7 +53,8 @@
           "exerciseTypes": [
             "match-pairs",
             "multiple-choice"
-          ]
+          ],
+          "freeAnswerKind": "none"
         },
         {
           "title": "Ожидания и спираль цен",
@@ -77,7 +79,8 @@
           "exerciseTypes": [
             "true-false",
             "order-steps"
-          ]
+          ],
+          "freeAnswerKind": "none"
         },
         {
           "title": "Виды и темпы инфляции",
@@ -102,7 +105,8 @@
           "exerciseTypes": [
             "match-pairs",
             "true-false"
-          ]
+          ],
+          "freeAnswerKind": "none"
         },
         {
           "title": "Последствия и борьба с инфляцией",
@@ -130,7 +134,8 @@
           "exerciseTypes": [
             "multiple-choice",
             "match-pairs"
-          ]
+          ],
+          "freeAnswerKind": "none"
         }
       ]
     }

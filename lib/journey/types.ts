@@ -40,6 +40,9 @@ export type Journey = {
   createdAt: string;
   doubts: SourceDoubt[];
   checkpoints: Checkpoint[];
+  // Только при разработке: путешествие собрано из сохранённых ответов модели
+  // (lib/journey/fixtures/) — свободные ответы тогда оцениваются по ним же, без запросов
+  fixture?: string;
 };
 
 // ---------- Публичная часть — то, что видит браузер ----------

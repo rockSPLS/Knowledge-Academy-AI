@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FREE_ANSWER_KINDS } from "@/lib/exercises/types";
 
 // Схемы ответов модели. Описывают только форму ответа: все поля обязательные,
 // без словарей и ограничений длины — такие схемы принимают провайдеры
@@ -6,13 +7,14 @@ import { z } from "zod";
 // длина текстов, уровни сложности) проверяет build.ts — с понятным текстом ошибки,
 // который уходит модели при повторе.
 
-// Типы упражнений, которые умеет генерировать путешествие (пока только базовые)
+// Типы упражнений, которые умеет генерировать путешествие: базовые и свободный ответ
 export const GENERATED_TYPES = [
   "multiple-choice",
   "true-false",
   "fill-blank",
   "match-pairs",
   "order-steps",
+  "free-answer",
 ] as const;
 
 export type GeneratedType = (typeof GENERATED_TYPES)[number];
@@ -37,6 +39,9 @@ export const planSchema = z.object({
       // Номера более ранних чекпоинтов (с 1)
       dependsOn: z.array(z.number()),
       exerciseTypes: z.array(z.enum(GENERATED_TYPES)),
+      // Вид свободного ответа, если free-answer есть среди exerciseTypes, иначе "none".
+      // Вид выбирает план: он видит все понятия сразу и может сделать виды разными
+      freeAnswerKind: z.enum(["none", ...FREE_ANSWER_KINDS]),
     }),
   ),
 });
@@ -86,6 +91,15 @@ const generatedExerciseSchema = z.discriminatedUnion("type", [
     ...common,
     // Шаги в верном порядке
     steps: z.array(z.string()),
+  }),
+  z.object({
+    type: z.literal("free-answer"),
+    ...common,
+    // Вид задания не пишется здесь — он задан в плане (freeAnswerKind)
+    // 2–3 мысли, которые должны быть в ответе
+    criteria: z.array(z.string()),
+    // Образец ответа — показывается при раскрытии
+    sample: z.string(),
   }),
 ]);
 

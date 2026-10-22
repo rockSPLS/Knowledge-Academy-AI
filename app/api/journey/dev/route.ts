@@ -1,15 +1,28 @@
 import { z } from "zod";
-import { fixtures, recordingModel, replayModel, type Fixture } from "@/lib/journey/fixtures";
+import * as freeAnswer from "@/lib/exercises/handlers/freeAnswer";
+import { MAX_FREE_ANSWER_LENGTH } from "@/lib/exercises/limits";
+import {
+  fixtures,
+  recordingJudge,
+  recordingModel,
+  replayModel,
+  type Fixture,
+} from "@/lib/journey/fixtures";
 import { askModel, generateJourney, type AskModel } from "@/lib/journey/generate";
+import { askJudge, judgeAnswer } from "@/lib/journey/judge";
 import { toPublicJourney } from "@/lib/journey/public";
 import { sealJourney, unsealJourney } from "@/lib/journey/seal";
 import { MAX_SOURCE_LENGTH } from "@/lib/llm/limits";
-import { consumeModelRequest } from "@/lib/llm/rateLimit";
+import { consumeEvaluationRequest, consumeModelRequest } from "@/lib/llm/rateLimit";
 import { readJsonBody } from "@/lib/llm/request";
 import { modelFailureResponse, rateLimitedResponse } from "@/lib/llm/responses";
 
 // POST /api/journey/dev — генерация путешествия для разработки, только при разработке.
 // - { fixture: "photosynthesis" } — по сохранённым ответам модели, без запросов к ней;
+//   свободные ответы такого путешествия тоже оцениваются по сохранённым ответам;
+// - { judge: { fixture, exerciseId, answer } } — настоящая оценка свободного ответа
+//   из сохранённого путешествия (подбор промпта оценщика); ответы модели возвращаются
+//   в поле recording в формате сохранённых оценок (поле judge в lib/journey/fixtures/);
 // - { responses: { description, source, plan, checkpoints } } — то же по ответам из запроса
 //   (проверка отдельных случаев: ошибка в ответе, повтор, отказ);
 // - { source, record: true } — настоящая генерация; ответы модели возвращаются
@@ -32,6 +45,13 @@ const requestSchema = z.union([
   z.object({ responses: fixtureSchema }),
   z.object({ source: z.string().trim().min(1).max(MAX_SOURCE_LENGTH), record: z.literal(true) }),
   z.object({ unseal: z.string() }),
+  z.object({
+    judge: z.object({
+      fixture: z.string(),
+      exerciseId: z.string(),
+      answer: z.string().trim().min(1).max(MAX_FREE_ANSWER_LENGTH),
+    }),
+  }),
 ]);
 
 export async function POST(request: Request) {
@@ -49,6 +69,7 @@ export async function POST(request: Request) {
   if ("unseal" in parsed.data) {
     return Response.json({ journey: unsealJourney(parsed.data.unseal) });
   }
+  if ("judge" in parsed.data) return judgeWithModel(request, parsed.data.judge);
 
   let source: string;
   let ask: AskModel;
@@ -83,6 +104,9 @@ export async function POST(request: Request) {
     );
   }
 
+  // Путешествие из сохранённых ответов: свободные ответы оцениваются по ним же
+  if ("fixture" in parsed.data) result.journey.fixture = parsed.data.fixture;
+
   const sealed = sealJourney(result.journey);
   const roundTrip = sealed
     ? JSON.stringify(unsealJourney(sealed)) === JSON.stringify(result.journey)
@@ -93,5 +117,33 @@ export async function POST(request: Request) {
     full: result.journey,
     roundTrip,
     ...(recording && { recording: { description: "", source, ...recording } }),
+  });
+}
+
+// Настоящая оценка свободного ответа из сохранённого путешествия — под тем же
+// лимитом, что и обычная оценка
+async function judgeWithModel(
+  request: Request,
+  { fixture: name, exerciseId, answer }: { fixture: string; exerciseId: string; answer: string },
+): Promise<Response> {
+  const fixture = fixtures[name];
+  if (!fixture) return Response.json({ error: "Нет таких сохранённых ответов" }, { status: 404 });
+  const built = await generateJourney(fixture.source, replayModel(fixture));
+  if (!built.ok) return Response.json({ error: "Сохранённые ответы не собрались" }, { status: 500 });
+  const exercise = built.journey.checkpoints
+    .flatMap((checkpoint) => checkpoint.exercises)
+    .map((item) => item.exercise)
+    .find((item) => item.id === exerciseId);
+  if (exercise?.type !== "free-answer") {
+    return Response.json({ error: "Нет такого свободного ответа" }, { status: 404 });
+  }
+
+  const limit = consumeEvaluationRequest(request);
+  if (!limit.ok) return rateLimitedResponse(limit.retryAfterSec);
+  const responses: unknown[] = [];
+  const judged = await judgeAnswer(exercise, answer, recordingJudge(askJudge, responses), request.signal);
+  return Response.json({
+    result: judged.ok ? freeAnswer.check(exercise, judged.evaluation) : judged,
+    recording: { exerciseId, answer, responses },
   });
 }

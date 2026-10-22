@@ -339,6 +339,61 @@ export type PromptRewriteReview = {
   sample: string;
 };
 
+// ---------- Свободный ответ (free-answer) ----------
+// Пользователь отвечает своими словами, ответ оценивает языковая модель по 2–3 критериям,
+// которые созданы вместе с вопросом. Есть только в путешествиях: вопрос, критерии
+// и образец пишет модель при генерации.
+
+// Вид задания: развёрнутый ответ / объясните простыми словами / объясните другу
+// (друг верит в типичное заблуждение) / приведите свой пример. Список — единственный
+// в проекте: по нему же строятся схема генерации и проверка упражнения.
+// Новый вид — ещё описания в двух промптах (lib/journey/prompts.ts) и компонент
+// в components/exercises/types/ с веткой в ExerciseView
+export const FREE_ANSWER_KINDS = ["explain", "simple", "friend", "example"] as const;
+export type FreeAnswerKind = (typeof FREE_ANSWER_KINDS)[number];
+
+// Критерий: одна мысль, которая должна быть в ответе. Приватен: подсказывает ответ
+export type FreeAnswerCriterion = {
+  id: string;
+  text: string;
+};
+
+export type FreeAnswerExercise = {
+  id: string;
+  type: "free-answer";
+  kind: FreeAnswerKind;
+  question: string;
+  // От 2 до 3 критериев
+  criteria: FreeAnswerCriterion[];
+  // Образец ответа — показывается только при раскрытии
+  sample: string;
+  explanation: string;
+};
+
+export type PublicFreeAnswer = {
+  id: string;
+  type: "free-answer";
+  kind: FreeAnswerKind;
+  question: string;
+};
+
+export type FreeAnswerAnswer = {
+  text: string;
+};
+
+// Отзыв модели по одному критерию: выполнен ли и что получилось или чего не хватает
+export type FreeAnswerFeedback = {
+  met: boolean;
+  feedback: string;
+};
+
+export type FreeAnswerReview = {
+  type: "free-answer";
+  // Критерии в порядке упражнения, с отзывом модели
+  criteria: (FreeAnswerFeedback & { id: string; text: string })[];
+  sample: string;
+};
+
 // ---------- Общие типы ----------
 
 // По мере добавления типов сюда дописываются новые варианты через `|`
@@ -349,7 +404,8 @@ export type Exercise =
   | MatchPairsExercise
   | OrderStepsExercise
   | CostedSelectExercise
-  | PromptRewriteExercise;
+  | PromptRewriteExercise
+  | FreeAnswerExercise;
 export type PublicExercise =
   | PublicMultipleChoice
   | PublicTrueFalse
@@ -357,7 +413,8 @@ export type PublicExercise =
   | PublicMatchPairs
   | PublicOrderSteps
   | PublicCostedSelect
-  | PublicPromptRewrite;
+  | PublicPromptRewrite
+  | PublicFreeAnswer;
 export type ExerciseReviewDetails =
   | MultipleChoiceReview
   | TrueFalseReview
@@ -365,7 +422,8 @@ export type ExerciseReviewDetails =
   | MatchPairsReview
   | OrderStepsReview
   | CostedSelectReview
-  | PromptRewriteReview;
+  | PromptRewriteReview
+  | FreeAnswerReview;
 
 // Итог проверки: верно (балл 1), частично верно (между 0 и 1), неверно (0)
 export type Verdict = "correct" | "partial" | "incorrect";
@@ -388,6 +446,9 @@ export type CheckResult<D extends ExerciseReviewDetails = ExerciseReviewDetails>
   // Подсказка, полезная только для новой попытки (например, «проверьте написание»);
   // после раскрытия ответа не показывается
   retryHint?: string;
+  // Свободный ответ: отзыв модели по каждому критерию (что получилось, чего не хватает).
+  // Сами критерии и образец не называет, поэтому приходит и до раскрытия ответа
+  feedback?: FreeAnswerFeedback[];
   // Раскрытие ответа. Сервер присылает его, только если ответ верный,
   // если пользователь попросил показать ответ или если это тест.
   review?: ExerciseReview<D>;

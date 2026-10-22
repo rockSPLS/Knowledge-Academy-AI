@@ -31,7 +31,8 @@
           "exerciseTypes": [
             "multiple-choice",
             "fill-blank"
-          ]
+          ],
+          "freeAnswerKind": "none"
         },
         {
           "title": "Брожение и его продукты",
@@ -53,7 +54,8 @@
           "exerciseTypes": [
             "true-false",
             "multiple-choice"
-          ]
+          ],
+          "freeAnswerKind": "none"
         },
         {
           "title": "Клейковина удерживает газ",
@@ -76,7 +78,8 @@
           "exerciseTypes": [
             "match-pairs",
             "multiple-choice"
-          ]
+          ],
+          "freeAnswerKind": "none"
         },
         {
           "title": "Температура и скорость брожения",
@@ -98,7 +101,8 @@
           "exerciseTypes": [
             "true-false",
             "multiple-choice"
-          ]
+          ],
+          "freeAnswerKind": "none"
         },
         {
           "title": "Что происходит при выпечке",
@@ -122,7 +126,8 @@
           "exerciseTypes": [
             "order-steps",
             "multiple-choice"
-          ]
+          ],
+          "freeAnswerKind": "none"
         }
       ]
     }

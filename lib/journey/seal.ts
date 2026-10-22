@@ -13,18 +13,25 @@ import type { Journey } from "./types";
 // Ключ — переменная окружения JOURNEY_SECRET (образец — .env.example), не короче
 // 32 символов. Без неё генерация недоступна. Смена секрета делает недействительными
 // уже выданные путешествия — их нужно сгенерировать заново.
+//
+// Тем же способом запечатывается оценка свободного ответа (judge.ts), но другим ключом:
+// ключ выводится из секрета с указанием назначения, поэтому запечатанное путешествие
+// нельзя выдать за оценку и наоборот.
 
 const FORMAT = "v1";
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 const MIN_SECRET_LENGTH = 32;
 
+// Назначение запечатанных данных: из него и секрета выводится свой ключ
+type SealPurpose = "journey-seal" | "free-answer-evaluation";
+
 // Ключ шифрования выводится из секрета (HKDF), а не берётся напрямую:
 // секрет — произвольная строка, а AES-256 нужен ключ ровно в 32 байта
-function readKey(): Buffer | null {
+function readKey(purpose: SealPurpose = "journey-seal"): Buffer | null {
   const secret = process.env.JOURNEY_SECRET?.trim();
   if (!secret || secret.length < MIN_SECRET_LENGTH) return null;
-  return Buffer.from(hkdfSync("sha256", secret, "", "journey-seal", 32));
+  return Buffer.from(hkdfSync("sha256", secret, "", purpose, 32));
 }
 
 export function isSealConfigured(): boolean {
@@ -32,22 +39,31 @@ export function isSealConfigured(): boolean {
 }
 
 // Возвращает строку вида "v1.<base64url>" или null, если секрет не задан
-export function sealJourney(journey: Journey): string | null {
-  const key = readKey();
+export function sealValue(purpose: SealPurpose, value: unknown): string | null {
+  const key = readKey(purpose);
   if (!key) return null;
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   // Версия формата участвует в проверке подлинности: её нельзя подменить
   cipher.setAAD(Buffer.from(FORMAT));
-  const encrypted = Buffer.concat([cipher.update(JSON.stringify(journey), "utf8"), cipher.final()]);
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(value), "utf8"), cipher.final()]);
   const payload = Buffer.concat([iv, cipher.getAuthTag(), encrypted]);
   return `${FORMAT}.${payload.toString("base64url")}`;
 }
 
-// Расшифровывает путешествие; null — секрет не задан, строка повреждена, подделана
-// или зашифрована другим секретом
+export function sealJourney(journey: Journey): string | null {
+  return sealValue("journey-seal", journey);
+}
+
 export function unsealJourney(sealed: string): Journey | null {
-  const key = readKey();
+  const journey = unsealValue("journey-seal", sealed) as Journey | null;
+  return journey?.version === 1 ? journey : null;
+}
+
+// Расшифровывает значение; null — секрет не задан, строка повреждена, подделана,
+// зашифрована другим секретом или для другого назначения
+export function unsealValue(purpose: SealPurpose, sealed: string): unknown {
+  const key = readKey(purpose);
   if (!key) return null;
   const [format, data, extra] = sealed.split(".");
   if (format !== FORMAT || !data || extra !== undefined) return null;
@@ -61,8 +77,7 @@ export function unsealJourney(sealed: string): Journey | null {
       decipher.update(payload.subarray(IV_BYTES + TAG_BYTES)),
       decipher.final(),
     ]);
-    const journey = JSON.parse(decrypted.toString("utf8")) as Journey;
-    return journey.version === 1 ? journey : null;
+    return JSON.parse(decrypted.toString("utf8")) as unknown;
   } catch {
     return null;
   }

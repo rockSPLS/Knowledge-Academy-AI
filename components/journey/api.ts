@@ -23,6 +23,11 @@ async function postJson<T>(url: string, body: unknown, signal?: AbortSignal): Pr
       signal,
     });
   } catch (error) {
+    // Сервер не ответил за отведённое время — понятный текст вместо общего «нет связи»
+    if (signal?.aborted && signal.reason instanceof DOMException && signal.reason.name === "TimeoutError") {
+      throw new JourneyApiError("Сервер слишком долго не отвечает. Попробуйте ещё раз.", "timeout");
+    }
+    // Запрос отменили сами (например, «Отменить» при генерации)
     if (signal?.aborted) throw error;
     throw new JourneyApiError("Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.", "network");
   }
@@ -55,17 +60,24 @@ export async function loadFixtureJourney(fixture: string, signal: AbortSignal): 
 
 // Если сервер не ответил за 10 секунд — ошибка, а не вечное ожидание (как у /api/check)
 const EXERCISE_TIMEOUT_MS = 10_000;
+// Свободный ответ оценивает модель: до двух попыток по 25 секунд (lib/journey/judge.ts)
+const JUDGE_TIMEOUT_MS = 60_000;
+
+// evaluation — у свободного ответа: запечатанная оценка, сервер присылает её с итогом.
+// С ней раскрытие ответа не обращается к модели снова
+export type JourneyCheckResult = CheckResult & { evaluation?: string | null };
 
 export function checkJourneyAnswer(
   sealed: string,
   exerciseId: string,
   answer: unknown,
   reveal: boolean,
-): Promise<CheckResult> {
+  freeAnswer?: { evaluation?: string },
+): Promise<JourneyCheckResult> {
   return postJson(
     "/api/journey/exercise",
-    { action: "check", sealed, exerciseId, answer, reveal },
-    AbortSignal.timeout(EXERCISE_TIMEOUT_MS),
+    { action: "check", sealed, exerciseId, answer, reveal, evaluation: freeAnswer?.evaluation },
+    AbortSignal.timeout(freeAnswer ? JUDGE_TIMEOUT_MS : EXERCISE_TIMEOUT_MS),
   );
 }
 

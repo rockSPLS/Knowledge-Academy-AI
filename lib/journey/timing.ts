@@ -13,6 +13,8 @@ const NORMS: Record<PublicExercise["type"], { base: number; perItem: number }> =
   "fill-blank": { base: 15, perItem: 15 },
   "match-pairs": { base: 15, perItem: 12 },
   "order-steps": { base: 15, perItem: 10 },
+  // Подумать и написать 2–5 предложений; элементов ответа нет
+  "free-answer": { base: 120, perItem: 0 },
   // Сгенерированных упражнений этих типов пока нет — нормы на будущее
   "costed-select": { base: 30, perItem: 10 },
   "prompt-rewrite": { base: 180, perItem: 0 },
@@ -38,6 +40,7 @@ function itemCount(exercise: PublicExercise): number {
     case "costed-select":
       return exercise.options.length;
     case "prompt-rewrite":
+    case "free-answer":
       return 0;
   }
 }

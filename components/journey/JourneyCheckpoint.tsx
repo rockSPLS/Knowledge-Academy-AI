@@ -9,6 +9,7 @@ import { checkpointSeconds, formatTime } from "@/lib/journey/timing";
 import type { PublicCheckpoint } from "@/lib/journey/types";
 import { checkJourneyAnswer, fetchHint, fetchSkipExplanation } from "./api";
 import { CheckpointTimer } from "./CheckpointTimer";
+import { skippedLabel } from "./outcomeLabels";
 import { JourneyExerciseContext, type JourneyExerciseApi } from "./JourneyExerciseContext";
 import {
   isCheckpointDone,
@@ -82,6 +83,9 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
   const [finalizeFailed, setFinalizeFailed] = useState(false);
   // Отправка уже идёт — повторное нажатие её не запускает
   const isFinalizing = useRef(false);
+  // Свободные ответы: запечатанная оценка последней попытки — с ней «Показать ответ»
+  // не обращается к модели снова (сервер проверит, что она от того же ответа)
+  const evaluations = useRef(new Map<string, string>());
 
   const finalizeAll = useCallback(() => {
     if (isFinalizing.current) return;
@@ -122,7 +126,16 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
     return {
       maxAttempts: (id) => (findExercise(id)?.type === "true-false" ? 1 : 2),
       attemptsUsed: (id) => progress.attempts[id]?.count ?? 0,
-      check: (id, answer, reveal) => checkJourneyAnswer(sealed, id, answer, reveal),
+      check: async (id, answer, reveal) => {
+        if (findExercise(id)?.type !== "free-answer") {
+          return checkJourneyAnswer(sealed, id, answer, reveal);
+        }
+        const { evaluation, ...result } = await checkJourneyAnswer(sealed, id, answer, reveal, {
+          evaluation: evaluations.current.get(id),
+        });
+        if (evaluation) evaluations.current.set(id, evaluation);
+        return result;
+      },
       recordCheck: (id, result, attempt) =>
         safeDispatch({
           type: "checked",
@@ -133,9 +146,9 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
           explanation: result.review?.explanation,
           now: Date.now(),
         }),
-      skip: async (id) => {
+      skip: async (id, unrated = false) => {
         const explanation = await fetchSkipExplanation(sealed, id);
-        safeDispatch({ type: "skipped", exerciseId: id, explanation, now: Date.now() });
+        safeDispatch({ type: "skipped", exerciseId: id, explanation, unrated, now: Date.now() });
       },
       outcomeFor: (id) => progress.outcomes[id],
       hintFor: (id) => progress.hints[id],
@@ -230,11 +243,19 @@ function RestoredExercise({ question, outcome }: { question: string; outcome: Ex
     <section className="my-8 rounded-xl border border-border bg-surface p-5 text-sm">
       <p className="text-base font-semibold">{question}</p>
       <p className={`mt-3 inline-flex items-center gap-1.5 font-semibold ${outcome.skipped ? "text-muted" : verdict.className}`}>
-        {outcome.skipped ? <Clock size={18} aria-hidden="true" /> : <verdict.Icon size={18} aria-hidden="true" />}
-        {outcome.skipped ? "Время вышло — ответа нет" : verdict.label}
+        {outcome.skipped ? (
+          outcome.unrated ? <TriangleAlert size={18} aria-hidden="true" /> : <Clock size={18} aria-hidden="true" />
+        ) : (
+          <verdict.Icon size={18} aria-hidden="true" />
+        )}
+        {outcome.skipped ? skippedLabel(outcome) : verdict.label}
         {outcome.attempts > 1 && <span className="font-normal text-muted">· со второй попытки</span>}
       </p>
-      <p className="mt-2 text-muted">{outcome.explanation}</p>
+      {outcome.unrated && !outcome.skipped && (
+        <p className="mt-1 text-muted">{skippedLabel(outcome)}</p>
+      )}
+      {/* В объяснении свободного ответа образец — отдельным абзацем */}
+      <p className="mt-2 whitespace-pre-line text-muted">{outcome.explanation}</p>
     </section>
   );
 }

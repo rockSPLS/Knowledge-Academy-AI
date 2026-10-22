@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CheckResult } from "@/lib/exercises/types";
 import { useTestContext } from "@/components/test/TestContext";
 import { useJourneyExercise } from "@/components/journey/JourneyExerciseContext";
+import { JourneyApiError } from "@/components/journey/api";
 
 // Общая логика любого упражнения: отправить ответ на проверку,
 // хранить статус и результат, раскрыть ответ по запросу,
@@ -12,8 +13,16 @@ import { useJourneyExercise } from "@/components/journey/JourneyExerciseContext"
 // и отправлять ответ как есть, когда время чекпоинта вышло.
 // Каждый тип упражнения использует этот хук и добавляет только свой способ ввода ответа.
 
-// skipped — путешествие: время вышло, а ответа не было
-export type ExerciseStatus = "idle" | "checking" | "checked" | "revealing" | "error" | "skipped";
+// skipped — путешествие: время вышло, а ответа не было (или свободный ответ пропущен
+// без оценки); skipping — пропуск отправляется
+export type ExerciseStatus =
+  | "idle"
+  | "checking"
+  | "checked"
+  | "revealing"
+  | "error"
+  | "skipping"
+  | "skipped";
 export type ExerciseMode = "inline" | "test";
 
 // Текущий ответ, который пользователь ещё не отправил. answer — готовый к отправке ответ
@@ -41,7 +50,13 @@ async function requestCheck(
   return response.json();
 }
 
-export function useExercise<TAnswer>(exerciseId: string, draft: ExerciseDraft<TAnswer>) {
+// unratedFallback — свободный ответ: если оценить его не удалось, а время чекпоинта вышло,
+// упражнение пропускается без оценки (ждать, пока модель снова станет доступна, некогда)
+export function useExercise<TAnswer>(
+  exerciseId: string,
+  draft: ExerciseDraft<TAnswer>,
+  options?: { unratedFallback?: boolean },
+) {
   const test = useTestContext();
   const journey = useJourneyExercise();
   // Путешествие выглядит как статья: своя кнопка «Проверить» и итог сразу
@@ -49,6 +64,9 @@ export function useExercise<TAnswer>(exerciseId: string, draft: ExerciseDraft<TA
   const [status, setStatus] = useState<ExerciseStatus>("idle");
   const [result, setResult] = useState<CheckResult | null>(null);
   const [revealError, setRevealError] = useState(false);
+  // Путешествие: текст ошибки от сервера (например, «оценка сейчас недоступна»);
+  // null — показать общее сообщение
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // Последний отправленный ответ — нужен, чтобы по кнопке «Показать ответ»
   // сервер разобрал именно его (что отмечено верно, что лишнее, что пропущено)
   const lastAnswer = useRef<TAnswer | null>(null);
@@ -63,6 +81,7 @@ export function useExercise<TAnswer>(exerciseId: string, draft: ExerciseDraft<TA
 
   async function sendAnswer(answer: TAnswer): Promise<boolean> {
     setStatus("checking");
+    setErrorMessage(null);
     lastAnswer.current = answer;
     try {
       if (journey) {
@@ -83,7 +102,8 @@ export function useExercise<TAnswer>(exerciseId: string, draft: ExerciseDraft<TA
       setStatus("checked");
       test?.report(exerciseId, checked);
       return true;
-    } catch {
+    } catch (error) {
+      setErrorMessage(error instanceof JourneyApiError ? error.message : null);
       setStatus("error");
       return false;
     }
@@ -125,20 +145,27 @@ export function useExercise<TAnswer>(exerciseId: string, draft: ExerciseDraft<TA
   }
 
   // Путешествие: время вышло, а ответа нет — итог «не успели»
-  // (или итог первой попытки, если она была)
-  function skip(): Promise<boolean> {
-    pending.current = sendSkip();
+  // (или итог первой попытки, если она была). unrated — свободный ответ
+  // пропущен без оценки, потому что модель недоступна
+  function skip(unrated = false): Promise<boolean> {
+    pending.current = sendSkip(unrated);
     return pending.current;
   }
 
-  async function sendSkip(): Promise<boolean> {
+  async function sendSkip(unrated: boolean): Promise<boolean> {
     if (!journey) return false;
-    setStatus("checking");
+    setStatus("skipping");
+    setErrorMessage(null);
     try {
-      await journey.skip(exerciseId);
+      await journey.skip(exerciseId, unrated);
       setStatus("skipped");
       return true;
-    } catch {
+    } catch (error) {
+      setErrorMessage(
+        error instanceof JourneyApiError
+          ? error.message
+          : "Не удалось пропустить упражнение. Попробуйте ещё раз.",
+      );
       setStatus("error");
       return false;
     }
@@ -177,6 +204,7 @@ export function useExercise<TAnswer>(exerciseId: string, draft: ExerciseDraft<TA
 
   const registerFinalizer = journey?.registerFinalizer;
   const outcomeFor = journey?.outcomeFor;
+  const unratedFallback = options?.unratedFallback ?? false;
 
   // Когда время выйдет: заполненный ответ отправляется как есть, после неудачной
   // первой попытки раскрывается её разбор, без ответа — «не успели».
@@ -188,15 +216,19 @@ export function useExercise<TAnswer>(exerciseId: string, draft: ExerciseDraft<TA
       if (outcomeFor(exerciseId)) return true;
       const { answer, status: current, result: last } = latest.current;
       if (current === "idle" || current === "error") {
-        return answer !== null ? latest.current.submit(answer) : latest.current.skip();
+        if (answer === null) return latest.current.skip();
+        const sent = await latest.current.submit(answer);
+        return sent || !unratedFallback ? sent : latest.current.skip(true);
       }
       if (current === "checked" && last && !last.review) return latest.current.revealAnswer();
-      if ((current === "checking" || current === "revealing") && pending.current) {
-        return pending.current;
+      if ((current === "checking" || current === "skipping" || current === "revealing") && pending.current) {
+        const done = await pending.current;
+        // Свободный ответ проверялся, когда время вышло, и оценить его не удалось — пропуск без оценки
+        return done || !unratedFallback || current !== "checking" ? done : latest.current.skip(true);
       }
       return true;
     });
-  }, [registerFinalizer, outcomeFor, exerciseId]);
+  }, [registerFinalizer, outcomeFor, exerciseId, unratedFallback]);
 
   // Ответ нельзя менять: он отправлен или, в путешествии, время вышло
   // (тогда ответ уходит как есть, даже если отправка не удалась и её повторяют)
@@ -207,5 +239,16 @@ export function useExercise<TAnswer>(exerciseId: string, draft: ExerciseDraft<TA
   // Сам результат уже отправлен в тест — он нужен для счёта.
   const visibleResult = test && !test.isFinished ? null : result;
 
-  return { status, result: visibleResult, revealError, submit, revealAnswer, reset, mode, locked };
+  return {
+    status,
+    result: visibleResult,
+    revealError,
+    errorMessage,
+    submit,
+    revealAnswer,
+    reset,
+    skip,
+    mode,
+    locked,
+  };
 }

@@ -13,6 +13,7 @@ import {
 import type { CheckResult, Verdict } from "@/lib/exercises/types";
 import { useTestContext } from "@/components/test/TestContext";
 import { useJourneyExercise } from "@/components/journey/JourneyExerciseContext";
+import { skippedLabel } from "@/components/journey/outcomeLabels";
 import type { ExerciseMode, ExerciseStatus } from "./useExercise";
 
 // Итог всегда обозначается значком и словом, а не только цветом —
@@ -63,6 +64,10 @@ type ExerciseShellProps = {
   status: ExerciseStatus;
   result: CheckResult | null;
   revealError: boolean;
+  // Путешествие: текст ошибки от сервера вместо общего «Не удалось проверить ответ»
+  errorMessage?: string | null;
+  // Что предложить после ошибки, кроме повторной проверки (свободный ответ — «Пропустить без оценки»)
+  errorAction?: React.ReactNode;
   mode: ExerciseMode;
   // Сообщение, если ответ заполнен не полностью (тип показывает его после попытки проверить).
   // Кнопка «Проверить» не блокируется: по клику видно, чего не хватает.
@@ -83,6 +88,8 @@ export function ExerciseShell({
   status,
   result,
   revealError,
+  errorMessage,
+  errorAction,
   mode,
   validationMessage,
   onSubmit,
@@ -91,7 +98,8 @@ export function ExerciseShell({
   children,
 }: ExerciseShellProps) {
   const isAnswered = status === "checked" || status === "revealing";
-  const isChecking = status === "checking";
+  // Пропуск без оценки отправляется — кнопка «Проверить» так же недоступна, как при проверке
+  const isChecking = status === "checking" || status === "skipping";
   const isRevealing = status === "revealing";
   const resultRef = useRef<HTMLDivElement>(null);
   const revealErrorRef = useRef<HTMLParagraphElement>(null);
@@ -127,6 +135,12 @@ export function ExerciseShell({
   // В путешествии, когда время вышло, разбор раскрывается сам
   const canRetryOrReveal = mode === "inline" && result !== null && !result.review && !isTimeUp;
   const isSkipped = status === "skipped";
+  // Свободный ответ пропущен без оценки по кнопке — кнопка исчезает, фокус переводим на итог
+  // (когда время вышло, итоги появляются во всех карточках разом — тогда фокус не трогаем)
+  const skippedRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (isSkipped && !isTimeUp) skippedRef.current?.focus();
+  }, [isSkipped, isTimeUp]);
   // Путешествие: итог упражнения записан — ответ больше не меняется
   const outcome = journey?.outcomeFor(exerciseId);
   const isSecondAttempt = outcome !== undefined && outcome.attempts > 1;
@@ -200,7 +214,7 @@ export function ExerciseShell({
             aria-disabled={isChecking}
             className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-accent-fill-foreground transition-colors hover:bg-accent-fill-hover aria-disabled:opacity-60"
           >
-            {isChecking ? "Проверяю…" : "Проверить"}
+            {status === "skipping" ? "Пропускаю…" : isChecking ? "Проверяю…" : "Проверить"}
           </button>
         )}
 
@@ -222,14 +236,15 @@ export function ExerciseShell({
         {status === "error" && (
           <p
             role={mode === "inline" ? "alert" : undefined}
-            className="inline-flex items-center gap-1.5 text-sm"
+            className="flex items-start gap-1.5 text-sm"
           >
-            <TriangleAlert size={16} aria-hidden="true" className="text-muted" />
+            <TriangleAlert size={16} aria-hidden="true" className="mt-0.5 shrink-0 text-muted" />
             {mode === "test"
               ? "Не удалось отправить ответ. Нажмите «Завершить тест» ещё раз."
-              : "Не удалось проверить ответ. Попробуйте ещё раз."}
+              : (errorMessage ?? "Не удалось проверить ответ. Попробуйте ещё раз.")}
           </p>
         )}
+        {status === "error" && !isTimeUp && errorAction}
 
         {isAnswered && result && verdict && (
           <div ref={resultRef} tabIndex={-1} className="space-y-2 text-sm outline-none">
@@ -244,6 +259,10 @@ export function ExerciseShell({
               </p>
             </div>
             {result.hint && <p>{result.hint}</p>}
+            {/* Свободный ответ: для экранных дикторов — отзыв по критериям стоит выше итога */}
+            {result.feedback && !result.review && (
+              <p className="sr-only">Отзыв по каждому критерию — выше.</p>
+            )}
             {result.retryHint && !result.review && <p>{result.retryHint}</p>}
             {result.review && (
               <>
@@ -299,17 +318,22 @@ export function ExerciseShell({
 
         {/* Путешествие: время вышло, ответа нет — итог первой попытки или «не успели» */}
         {isSkipped && outcome && (
-          <div className="space-y-2 text-sm">
+          <div ref={skippedRef} tabIndex={-1} className="space-y-2 text-sm outline-none">
             <p className="inline-flex items-center gap-1.5 font-semibold text-muted">
-              <Clock size={18} aria-hidden="true" />
-              {outcome.skipped ? "Время вышло — ответа нет" : "Время вышло — засчитана первая попытка"}
+              {outcome.unrated ? (
+                <TriangleAlert size={18} aria-hidden="true" />
+              ) : (
+                <Clock size={18} aria-hidden="true" />
+              )}
+              {skippedLabel(outcome)}
             </p>
             {!outcome.skipped && (
               <p className={`font-semibold ${VERDICTS[outcome.verdict].className}`}>
                 {VERDICTS[outcome.verdict].label}
               </p>
             )}
-            <p className="text-muted">{outcome.explanation}</p>
+            {/* В объяснении свободного ответа образец — отдельным абзацем */}
+            <p className="whitespace-pre-line text-muted">{outcome.explanation}</p>
           </div>
         )}
       </div>

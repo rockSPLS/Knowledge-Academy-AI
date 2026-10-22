@@ -1,5 +1,7 @@
 import "server-only";
 import {
+  EVALUATION_LIMIT_GLOBAL,
+  EVALUATION_LIMIT_PER_IP,
   RATE_LIMIT_GLOBAL,
   RATE_LIMIT_GLOBAL_WINDOW_MS,
   RATE_LIMIT_PER_IP,
@@ -46,8 +48,17 @@ function createRateLimiter(limit: number, windowMs: number) {
   };
 }
 
-const perIp = createRateLimiter(RATE_LIMIT_PER_IP, RATE_LIMIT_PER_IP_WINDOW_MS);
-const allClients = createRateLimiter(RATE_LIMIT_GLOBAL, RATE_LIMIT_GLOBAL_WINDOW_MS);
+// Два независимых лимита: генерация путешествия и оценка свободных ответов.
+// У каждого — счётчик по IP и общий на экземпляр; окна одинаковые
+function createModelLimit(perIpLimit: number, globalLimit: number) {
+  const perIp = createRateLimiter(perIpLimit, RATE_LIMIT_PER_IP_WINDOW_MS);
+  const allClients = createRateLimiter(globalLimit, RATE_LIMIT_GLOBAL_WINDOW_MS);
+  return function consume(request: Request): RateLimitResult {
+    const byIp = perIp(rateLimitKey(clientIp(request)));
+    if (!byIp.ok) return byIp;
+    return allClients("all");
+  };
+}
 
 // IP посетителя. На Vercel заголовок x-forwarded-for выставляет платформа
 // (значение от клиента перезаписывается). На других хостингах его можно подделать,
@@ -105,10 +116,9 @@ function expandIPv6(address: string): string[] | null {
   return groups.map((group) => parseInt(group, 16).toString(16));
 }
 
-// Учитывает запрос к модели. Считаются все запросы, даже некорректные:
+// Учитывает запрос на генерацию путешествия. Считаются все запросы, даже некорректные:
 // лимит защищает и от простого засыпания сервера запросами
-export function consumeModelRequest(request: Request): RateLimitResult {
-  const byIp = perIp(rateLimitKey(clientIp(request)));
-  if (!byIp.ok) return byIp;
-  return allClients("all");
-}
+export const consumeModelRequest = createModelLimit(RATE_LIMIT_PER_IP, RATE_LIMIT_GLOBAL);
+
+// Учитывает оценку свободного ответа моделью (раскрытие по сохранённой оценке не считается)
+export const consumeEvaluationRequest = createModelLimit(EVALUATION_LIMIT_PER_IP, EVALUATION_LIMIT_GLOBAL);
