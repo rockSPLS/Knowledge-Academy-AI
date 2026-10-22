@@ -20,6 +20,12 @@ export const MAX_FREE_ANSWER_LENGTH = 1000;
 export const FREE_ANSWER_CRITERIA_MIN = 2;
 export const FREE_ANSWER_CRITERIA_MAX = 3;
 
+// Калибровка уверенности: сколько вопросов и длина ответа на один вопрос — слово или фраза,
+// поле в одну строку. Общие для генерации, поля ввода и схемы запроса
+export const CALIBRATION_ITEMS_MIN = 3;
+export const CALIBRATION_ITEMS_MAX = 4;
+export const MAX_CALIBRATION_ANSWER_LENGTH = 150;
+
 // Проверка id элемента упражнения для банка; возвращает текст ошибки или null
 export function validateItemIds(ids: string[], what: string): string | null {
   if (ids.some((id) => id.length === 0 || id.length > MAX_ID_LENGTH)) {

@@ -7,7 +7,8 @@ import { FREE_ANSWER_KINDS } from "@/lib/exercises/types";
 // длина текстов, уровни сложности) проверяет build.ts — с понятным текстом ошибки,
 // который уходит модели при повторе.
 
-// Типы упражнений, которые умеет генерировать путешествие: базовые и свободный ответ
+// Типы упражнений, которые умеет генерировать путешествие: базовые, свободный ответ
+// и калибровка уверенности
 export const GENERATED_TYPES = [
   "multiple-choice",
   "true-false",
@@ -15,6 +16,7 @@ export const GENERATED_TYPES = [
   "match-pairs",
   "order-steps",
   "free-answer",
+  "calibration",
 ] as const;
 
 export type GeneratedType = (typeof GENERATED_TYPES)[number];
@@ -100,6 +102,12 @@ const generatedExerciseSchema = z.discriminatedUnion("type", [
     criteria: z.array(z.string()),
     // Образец ответа — показывается при раскрытии
     sample: z.string(),
+  }),
+  z.object({
+    type: z.literal("calibration"),
+    ...common,
+    // Короткие вопросы и правильный ответ на каждый — слово или фраза
+    items: z.array(z.object({ question: z.string(), answer: z.string() })),
   }),
 ]);
 

@@ -394,6 +394,53 @@ export type FreeAnswerReview = {
   sample: string;
 };
 
+// ---------- Калибровка уверенности (calibration) ----------
+// Собственный тип путешествий: 3–4 коротких вопроса, ответ — своими словами (слово или фраза),
+// и у каждого отметка «Точно знаю» или «Сомневаюсь». Ответы оценивает языковая модель
+// (верно или нет), очки за уверенность и вывод «когда вы уверены, вы правы в N из M»
+// считает сервер. Попытка одна: после разбора уверенность уже не честная.
+
+// Вопрос: правильный короткий ответ — приватный
+export type CalibrationItem = {
+  id: string;
+  question: string;
+  answer: string;
+};
+
+export type CalibrationExercise = {
+  id: string;
+  type: "calibration";
+  question: string;
+  // От 3 до 4 вопросов
+  items: CalibrationItem[];
+  explanation: string;
+};
+
+export type PublicCalibration = {
+  id: string;
+  type: "calibration";
+  question: string;
+  items: { id: string; question: string }[];
+};
+
+// Ответ на каждый вопрос: текст и уверенность (true — «Точно знаю»)
+export type CalibrationAnswer = {
+  answers: Record<string, { text: string; confident: boolean }>;
+};
+
+// Оценка модели по одному вопросу: верен ли ответ и короткий отзыв
+export type CalibrationJudgement = {
+  correct: boolean;
+  feedback: string;
+};
+
+export type CalibrationReview = {
+  type: "calibration";
+  // По каждому вопросу: уверенность из ответа, оценка модели и правильный ответ.
+  // Из пар «уверенность — верно ли» считаются вывод в карточке, а дальше серия и достижения
+  items: Record<string, CalibrationJudgement & { confident: boolean; expected: string }>;
+};
+
 // ---------- Общие типы ----------
 
 // По мере добавления типов сюда дописываются новые варианты через `|`
@@ -405,7 +452,8 @@ export type Exercise =
   | OrderStepsExercise
   | CostedSelectExercise
   | PromptRewriteExercise
-  | FreeAnswerExercise;
+  | FreeAnswerExercise
+  | CalibrationExercise;
 export type PublicExercise =
   | PublicMultipleChoice
   | PublicTrueFalse
@@ -414,7 +462,8 @@ export type PublicExercise =
   | PublicOrderSteps
   | PublicCostedSelect
   | PublicPromptRewrite
-  | PublicFreeAnswer;
+  | PublicFreeAnswer
+  | PublicCalibration;
 export type ExerciseReviewDetails =
   | MultipleChoiceReview
   | TrueFalseReview
@@ -423,7 +472,8 @@ export type ExerciseReviewDetails =
   | OrderStepsReview
   | CostedSelectReview
   | PromptRewriteReview
-  | FreeAnswerReview;
+  | FreeAnswerReview
+  | CalibrationReview;
 
 // Итог проверки: верно (балл 1), частично верно (между 0 и 1), неверно (0)
 export type Verdict = "correct" | "partial" | "incorrect";

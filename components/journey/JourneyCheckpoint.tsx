@@ -6,6 +6,7 @@ import { ExerciseView } from "@/components/exercises/ExerciseView";
 import { VERDICTS } from "@/components/exercises/ExerciseShell";
 import { plural } from "@/lib/plural";
 import { checkpointSeconds, formatTime } from "@/lib/journey/timing";
+import type { CheckResult } from "@/lib/exercises/types";
 import type { PublicCheckpoint } from "@/lib/journey/types";
 import { checkJourneyAnswer, fetchHint, fetchSkipExplanation } from "./api";
 import { CheckpointTimer } from "./CheckpointTimer";
@@ -13,6 +14,7 @@ import { skippedLabel } from "./outcomeLabels";
 import { JourneyExerciseContext, type JourneyExerciseApi } from "./JourneyExerciseContext";
 import {
   isCheckpointDone,
+  type CalibrationMark,
   type ExerciseOutcome,
   type JourneyAction,
   type JourneyProgress,
@@ -124,12 +126,16 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
       if (isMounted.current) dispatch(action);
     };
     return {
-      maxAttempts: (id) => (findExercise(id)?.type === "true-false" ? 1 : 2),
+      maxAttempts: (id) => {
+        const type = findExercise(id)?.type;
+        return type === "true-false" || type === "calibration" ? 1 : 2;
+      },
       attemptsUsed: (id) => progress.attempts[id]?.count ?? 0,
       check: async (id, answer, reveal) => {
-        if (findExercise(id)?.type !== "free-answer") {
-          return checkJourneyAnswer(sealed, id, answer, reveal);
-        }
+        const type = findExercise(id)?.type;
+        // Калибровку тоже оценивает модель — с её тайм-аутом; запечатанной оценки у неё нет
+        if (type === "calibration") return checkJourneyAnswer(sealed, id, answer, reveal, {});
+        if (type !== "free-answer") return checkJourneyAnswer(sealed, id, answer, reveal);
         const { evaluation, ...result } = await checkJourneyAnswer(sealed, id, answer, reveal, {
           evaluation: evaluations.current.get(id),
         });
@@ -144,6 +150,7 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
           score: result.score,
           verdict: result.verdict,
           explanation: result.review?.explanation,
+          calibration: calibrationMarks(result),
           now: Date.now(),
         }),
       skip: async (id, unrated = false) => {
@@ -234,6 +241,13 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
       )}
     </div>
   );
+}
+
+// Калибровка: пары «уверенность — верно ли» из разбора, в порядке вопросов
+function calibrationMarks(result: CheckResult): CalibrationMark[] | undefined {
+  const details = result.review?.details;
+  if (details?.type !== "calibration") return undefined;
+  return Object.values(details.items).map(({ confident, correct }) => ({ confident, correct }));
 }
 
 // Упражнение с итогом, полученным до перезагрузки страницы

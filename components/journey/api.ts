@@ -60,11 +60,11 @@ export async function loadFixtureJourney(fixture: string, signal: AbortSignal): 
 
 // Если сервер не ответил за 10 секунд — ошибка, а не вечное ожидание (как у /api/check)
 const EXERCISE_TIMEOUT_MS = 10_000;
-// Свободный ответ оценивает модель: до двух попыток по 25 секунд (lib/journey/judge.ts)
+// Свободный ответ и калибровку оценивает модель: до двух попыток по 25 секунд (lib/journey/judge.ts)
 const JUDGE_TIMEOUT_MS = 60_000;
 
 // evaluation — у свободного ответа: запечатанная оценка, сервер присылает её с итогом.
-// С ней раскрытие ответа не обращается к модели снова
+// С ней раскрытие ответа не обращается к модели снова (у калибровки её нет: попытка одна)
 export type JourneyCheckResult = CheckResult & { evaluation?: string | null };
 
 export function checkJourneyAnswer(
@@ -72,12 +72,13 @@ export function checkJourneyAnswer(
   exerciseId: string,
   answer: unknown,
   reveal: boolean,
-  freeAnswer?: { evaluation?: string },
+  // Ответ оценивает модель (свободный ответ, калибровка) — ждём дольше
+  judged?: { evaluation?: string },
 ): Promise<JourneyCheckResult> {
   return postJson(
     "/api/journey/exercise",
-    { action: "check", sealed, exerciseId, answer, reveal, evaluation: freeAnswer?.evaluation },
-    AbortSignal.timeout(freeAnswer ? JUDGE_TIMEOUT_MS : EXERCISE_TIMEOUT_MS),
+    { action: "check", sealed, exerciseId, answer, reveal, evaluation: judged?.evaluation },
+    AbortSignal.timeout(judged ? JUDGE_TIMEOUT_MS : EXERCISE_TIMEOUT_MS),
   );
 }
 

@@ -10,7 +10,8 @@ import type { ExerciseOutcome } from "./state";
 // Вне путешествия контекста нет (как и у теста — см. components/test/TestContext.tsx).
 
 export type JourneyExerciseApi = {
-  // Сколько попыток даётся: у «верно/неверно» одна — вторая была бы угадыванием
+  // Сколько попыток даётся: у «верно/неверно» одна — вторая была бы угадыванием;
+  // у калибровки одна — после разбора отметка уверенности уже не честная
   maxAttempts: (exerciseId: string) => number;
   attemptsUsed: (exerciseId: string) => number;
   check: (exerciseId: string, answer: unknown, reveal: boolean) => Promise<CheckResult>;
@@ -18,7 +19,7 @@ export type JourneyExerciseApi = {
   // если в результате есть разбор — это итог упражнения
   recordCheck: (exerciseId: string, result: CheckResult, attempt: number | "same") => void;
   // Время вышло, а ответа нет: запрашивает объяснение и записывает итог «не успели».
-  // unrated — свободный ответ пропущен без оценки, потому что модель недоступна
+  // unrated — свободный ответ или калибровка пропущены без оценки, потому что модель недоступна
   skip: (exerciseId: string, unrated?: boolean) => Promise<void>;
   outcomeFor: (exerciseId: string) => ExerciseOutcome | undefined;
   hintFor: (exerciseId: string) => string | undefined;

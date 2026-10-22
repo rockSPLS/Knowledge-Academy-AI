@@ -6,6 +6,7 @@ import type { Journey } from "./types";
 import dough from "./fixtures/dough.json";
 import inflation from "./fixtures/inflation.json";
 import photosynthesis from "./fixtures/photosynthesis.json";
+import vaccines from "./fixtures/vaccines.json";
 
 // Сохранённые ответы модели: разработка и проверки без лишних запросов.
 // Файл — это ответы на каждый шаг цепочки в том виде, в каком их возвращает модель:
@@ -13,10 +14,12 @@ import photosynthesis from "./fixtures/photosynthesis.json";
 // модель ответила не по схеме, "unavailable" — модель была недоступна.
 // Ответы проходят те же проверки и ту же сборку,
 // что и настоящие, поэтому на них видно, как работают проверки и повтор.
-// judge — ответы оценщика свободных ответов: на какой ответ пользователя что ответила модель.
+// judge — ответы оценщика свободных ответов и калибровки: на какой ответ пользователя
+// что ответила модель.
 
 export type JudgeFixture = {
   exerciseId: string;
+  // Текст свободного ответа; у калибровки — ответы на вопросы через перевод строки
   answer: string;
   // Ответы модели по попыткам, как в plan и checkpoints
   responses: unknown[];
@@ -33,12 +36,13 @@ export type Fixture = {
 // photosynthesis — пример, составленный вручную; первая попытка упражнений
 // второго чекпоинта в нём намеренно ошибочна (проверка повтора), а в первом
 // и втором чекпоинтах есть свободные ответы с сохранёнными оценками.
-// inflation и dough — настоящие ответы модели по теме и по тексту; что в них
+// inflation, dough и vaccines — настоящие ответы модели по теме и по тексту; что в них
 // проверяется — в поле description
 export const fixtures: Record<string, Fixture> = {
   photosynthesis,
   inflation,
   dough,
+  vaccines,
 };
 
 // «Модель», которая отвечает сохранёнными ответами по порядку попыток
@@ -71,13 +75,13 @@ export function recordingModel(inner: AskModel, into: Pick<Fixture, "plan" | "ch
 }
 
 // «Оценщик», который отвечает сохранёнными оценками. Ответ пользователя сверяется
-// мягко (регистр, «ё», пробелы); на незнакомый ответ «модель недоступна» —
-// так при разработке виден и запасной путь
+// мягко (регистр, «ё», пробелы) — построчно: у калибровки строка — ответ на один вопрос.
+// На незнакомый ответ «модель недоступна» — так при разработке виден и запасной путь
 export function replayJudge(fixture: Fixture): AskJudge {
   const used = new Map<string, number>();
   return async ({ exercise, answer, schema }) => {
     const entry = fixture.judge?.find(
-      (item) => item.exerciseId === exercise.id && normalizeText(item.answer) === normalizeText(answer),
+      (item) => item.exerciseId === exercise.id && normalizeLines(item.answer) === normalizeLines(answer),
     );
     if (!entry) return { ok: false, reason: "unavailable" };
     const key = `${entry.exerciseId}\n${entry.answer}`;
@@ -88,6 +92,10 @@ export function replayJudge(fixture: Fixture): AskJudge {
     const parsed = schema.safeParse(attempt);
     return parsed.success ? { ok: true, data: parsed.data } : { ok: false, reason: "invalid-output" };
   };
+}
+
+function normalizeLines(text: string): string {
+  return text.split("\n").map(normalizeText).join("\n");
 }
 
 // Обёртка над настоящим оценщиком: запоминает его ответы в формате JudgeFixture

@@ -10,14 +10,15 @@ import type {
   FreeAnswerReview,
   PublicFreeAnswer,
 } from "@/lib/exercises/types";
-import { useJourneyExercise } from "@/components/journey/JourneyExerciseContext";
 import { ExerciseShell } from "../ExerciseShell";
 import { REVIEW_MARKS } from "../reviewMarks";
+import { UnratedSkipAction } from "../UnratedSkipAction";
 import { useExercise } from "../useExercise";
 
-// Свободный ответ — общая начинка для четырёх видов задания (развёрнутый ответ,
-// простыми словами, объясните другу, свой пример: файлы рядом). Виды отличаются
-// названием, значком, инструкцией и подсказкой в поле; логика одна.
+// Свободный ответ — общая начинка для четырёх видов задания. У каждого вида свой
+// компонент в этой же папке: ExplainAnswer.tsx (развёрнутый ответ), ExplainSimply.tsx
+// (простыми словами), ExplainToFriend.tsx (объясните другу), OwnExample.tsx (свой пример).
+// Виды отличаются названием, значком, инструкцией и подсказкой в поле; логика одна.
 // Ответ оценивает модель по 2–3 критериям: после каждой попытки — отзыв по каждому
 // критерию (что получилось, чего не хватает), после раскрытия — сами критерии и образец.
 
@@ -35,7 +36,6 @@ export function FreeAnswer({ exercise, typeName, typeIcon, instruction, placehol
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fieldId = useId();
   const noteId = useId();
-  const journey = useJourneyExercise();
   // Черновик для теста: ответ готов, если в нём есть хоть что-то кроме пробелов и знаков
   const isFilled = normalizeText(text) !== "";
   const {
@@ -86,24 +86,7 @@ export function FreeAnswer({ exercise, typeName, typeIcon, instruction, placehol
       revealError={revealError}
       errorMessage={errorMessage}
       errorAction={
-        // Модель недоступна — путешествие не должно на этом застрять
-        journey && (
-          <div className="space-y-1">
-            <button
-              type="button"
-              onClick={() => skip(true)}
-              className="rounded-md border border-border-strong bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-border"
-            >
-              Пропустить без оценки
-            </button>
-            <p className="text-sm text-muted">
-              {/* Если первая попытка уже была, засчитывается она (как и при конце времени) */}
-              {journey.attemptsUsed(exercise.id) >= 1
-                ? "Откроется образец ответа, засчитается первая попытка."
-                : "Откроется образец ответа, упражнение не засчитается."}
-            </p>
-          </div>
-        )
+        <UnratedSkipAction exerciseId={exercise.id} onSkip={() => skip(true)} opens="Откроется образец ответа" />
       }
       mode={mode}
       validationMessage={isEmptyShown && !isFilled ? "Напишите ответ" : null}

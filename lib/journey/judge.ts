@@ -1,20 +1,34 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import type { FreeAnswerExercise, FreeAnswerFeedback } from "@/lib/exercises/types";
+import type {
+  CalibrationExercise,
+  CalibrationJudgement,
+  FreeAnswerExercise,
+  FreeAnswerFeedback,
+} from "@/lib/exercises/types";
 import { generateStructured, type ModelFailure, type ModelResult } from "@/lib/llm/client";
-import { JUDGE_SYSTEM, judgePrompt, retryNote } from "./prompts";
+import {
+  CALIBRATION_JUDGE_SYSTEM,
+  JUDGE_SYSTEM,
+  calibrationJudgePrompt,
+  judgePrompt,
+  retryNote,
+} from "./prompts";
 import { sealValue, unsealValue } from "./seal";
 
-// Оценка свободного ответа моделью. Модель решает по каждому критерию «выполнен или нет»
-// и пишет короткий отзыв; балл из этого считает сервер (handlers/freeAnswer.ts) —
+// Оценка ответов моделью: свободного ответа и калибровки уверенности.
+// Свободный ответ: модель решает по каждому критерию «выполнен или нет» и пишет короткий отзыв.
+// Калибровка: по каждому вопросу «верно или нет» и отзыв; отметок уверенности модель не видит.
+// Балл из этого считает сервер (handlers/freeAnswer.ts, handlers/calibration.ts) —
 // число модель не выбирает. Ответ пользователя передаётся между метками со случайной
 // частью (prompts.ts), поэтому для модели это данные, а не инструкции. Даже если
 // инъекция удастся, она изменит только оценку и отзыв, которые видит сам автор ответа.
 //
-// Готовая оценка запечатывается и уходит в браузер вместе с итогом: по кнопке
-// «Показать ответ» сервер берёт её, а не спрашивает модель снова — это не тратит
-// запрос, и разбор совпадает с итогом, который человек уже видел.
+// Готовая оценка свободного ответа запечатывается и уходит в браузер вместе с итогом:
+// по кнопке «Показать ответ» сервер берёт её, а не спрашивает модель снова — это не тратит
+// запрос, и разбор совпадает с итогом, который человек уже видел. У калибровки попытка
+// одна и разбор приходит сразу, запечатывать нечего.
 
 // Тайм-аут одной попытки и потолок длины ответа. С повтором худший случай —
 // около 50 секунд (maxDuration маршрута — 60 с, ожидание в браузере — 60 с)
@@ -31,78 +45,156 @@ export const judgeSchema = z.object({
 
 export type JudgeOutput = z.infer<typeof judgeSchema>;
 
-// Запрос к модели-оценщику. exercise и answer — для сохранённых ответов (fixtures.ts)
-export type AskJudge = (request: {
-  exercise: FreeAnswerExercise;
+// Схема ответа модели для калибровки: по элементу на вопрос; item — номер вопроса (с 1)
+export const calibrationJudgeSchema = z.object({
+  items: z.array(z.object({ item: z.number(), correct: z.boolean(), feedback: z.string() })),
+});
+
+export type CalibrationJudgeOutput = z.infer<typeof calibrationJudgeSchema>;
+
+// Запрос к модели-оценщику. exercise и answer — для сохранённых ответов (fixtures.ts):
+// answer — текст свободного ответа, у калибровки — ответы на вопросы через перевод строки
+export type AskJudge = <T>(request: {
+  exercise: FreeAnswerExercise | CalibrationExercise;
   answer: string;
-  schema: typeof judgeSchema;
+  schema: z.ZodType<T>;
   system: string;
   prompt: string;
   timeoutMs: number;
   maxOutputTokens: number;
   abortSignal?: AbortSignal;
-}) => Promise<ModelResult<JudgeOutput>>;
+}) => Promise<ModelResult<T>>;
 
 // Настоящий запрос к модели
 export const askJudge: AskJudge = (request) => generateStructured(request);
 
-export type JudgeResult = { ok: true; evaluation: FreeAnswerFeedback[] } | { ok: false; reason: ModelFailure };
+type Judged<T> = { ok: true; evaluation: T[] } | { ok: false; reason: ModelFailure };
+export type JudgeResult = Judged<FreeAnswerFeedback>;
+export type CalibrationJudgeResult = Judged<CalibrationJudgement>;
 
-// Оценивает ответ. Если ответ модели не прошёл схему или проверку — один повтор
-// с объяснением, что не так (как при генерации)
-export async function judgeAnswer(
+// Оценивает свободный ответ
+export function judgeAnswer(
   exercise: FreeAnswerExercise,
   answer: string,
   ask: AskJudge = askJudge,
   abortSignal?: AbortSignal,
 ): Promise<JudgeResult> {
-  const basePrompt = judgePrompt(exercise, answer);
-  let prompt = basePrompt;
-  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-    if (abortSignal?.aborted) return { ok: false, reason: "unavailable" };
-    const result = await ask({
+  return runJudge(
+    ask,
+    {
       exercise,
       answer,
       schema: judgeSchema,
       system: JUDGE_SYSTEM,
+      prompt: judgePrompt(exercise, answer),
+      abortSignal,
+    },
+    (output) => {
+      const error = checkNumbered(
+        output.criteria.map(({ criterion, feedback }) => ({ number: criterion, feedback })),
+        exercise.criteria.length,
+        { list: "criteria", number: "criterion", what: "критерий", whose: "критериев" },
+      );
+      if (error) return { ok: false, error };
+      return {
+        ok: true,
+        evaluation: [...output.criteria]
+          .sort((a, b) => a.criterion - b.criterion)
+          .map(({ met, feedback }) => ({ met, feedback: feedback.trim() })),
+      };
+    },
+  );
+}
+
+// Оценивает ответы калибровки; texts — ответы в порядке вопросов
+export function judgeCalibration(
+  exercise: CalibrationExercise,
+  texts: string[],
+  ask: AskJudge = askJudge,
+  abortSignal?: AbortSignal,
+): Promise<CalibrationJudgeResult> {
+  return runJudge(
+    ask,
+    {
+      exercise,
+      answer: texts.join("\n"),
+      schema: calibrationJudgeSchema,
+      system: CALIBRATION_JUDGE_SYSTEM,
+      prompt: calibrationJudgePrompt(exercise, texts),
+      abortSignal,
+    },
+    (output) => {
+      const error = checkNumbered(
+        output.items.map(({ item, feedback }) => ({ number: item, feedback })),
+        exercise.items.length,
+        { list: "items", number: "item", what: "вопрос", whose: "вопросов" },
+      );
+      if (error) return { ok: false, error };
+      return {
+        ok: true,
+        evaluation: [...output.items]
+          .sort((a, b) => a.item - b.item)
+          .map(({ correct, feedback }) => ({ correct, feedback: feedback.trim() })),
+      };
+    },
+  );
+}
+
+// Запрос к оценщику с повтором: если ответ модели не прошёл схему или проверку — один повтор
+// с объяснением, что не так (как при генерации). accept проверяет ответ и упорядочивает оценку
+async function runJudge<T, E>(
+  ask: AskJudge,
+  request: {
+    exercise: FreeAnswerExercise | CalibrationExercise;
+    answer: string;
+    schema: z.ZodType<T>;
+    system: string;
+    prompt: string;
+    abortSignal?: AbortSignal;
+  },
+  accept: (output: T) => { ok: true; evaluation: E[] } | { ok: false; error: string },
+): Promise<Judged<E>> {
+  const { exercise, abortSignal } = request;
+  let prompt = request.prompt;
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    if (abortSignal?.aborted) return { ok: false, reason: "unavailable" };
+    const result = await ask({
+      ...request,
       prompt,
       timeoutMs: JUDGE_TIMEOUT_MS,
       maxOutputTokens: JUDGE_MAX_OUTPUT_TOKENS,
-      abortSignal,
     });
     if (!result.ok) {
       if (result.reason !== "invalid-output") return result;
       console.error(`[judge] ${exercise.id}, попытка ${attempt}: ответ не по схеме`);
-      prompt = basePrompt + retryNote(null);
+      prompt = request.prompt + retryNote(null);
       continue;
     }
-    const error = checkJudgement(exercise, result.data);
-    if (!error) {
-      return {
-        ok: true,
-        evaluation: [...result.data.criteria]
-          .sort((a, b) => a.criterion - b.criterion)
-          .map(({ met, feedback }) => ({ met, feedback: feedback.trim() })),
-      };
-    }
-    console.error(`[judge] ${exercise.id}, попытка ${attempt}: ${error}`);
-    prompt = basePrompt + retryNote(error);
+    const accepted = accept(result.data);
+    if (accepted.ok) return accepted;
+    console.error(`[judge] ${exercise.id}, попытка ${attempt}: ${accepted.error}`);
+    prompt = request.prompt + retryNote(accepted.error);
   }
   return { ok: false, reason: "invalid-output" };
 }
 
-// Проверка ответа модели; возвращает текст ошибки (уйдёт модели при повторе) или null
-function checkJudgement(exercise: FreeAnswerExercise, output: JudgeOutput): string | null {
-  const count = exercise.criteria.length;
-  if (output.criteria.length !== count) {
-    return `в criteria нужно ровно ${count} элемента — по одному на каждый критерий`;
+// Проверка ответа модели: ровно по элементу на каждый критерий (вопрос), номера с 1
+// без повторов, отзыв — непустое короткое предложение. Возвращает текст ошибки
+// (уйдёт модели при повторе) или null. names — как поля и элементы называются в схеме
+function checkNumbered(
+  items: { number: number; feedback: string }[],
+  count: number,
+  names: { list: string; number: string; what: string; whose: string },
+): string | null {
+  if (items.length !== count) {
+    return `в ${names.list} нужно ровно ${count} элемента — по одному на каждый ${names.what}`;
   }
-  const numbers = output.criteria.map((item) => item.criterion).sort((a, b) => a - b);
+  const numbers = items.map((item) => item.number).sort((a, b) => a - b);
   if (!numbers.every((number, index) => number === index + 1)) {
-    return `criterion — целые номера критериев от 1 до ${count}, каждый по одному разу`;
+    return `${names.number} — целые номера ${names.whose} от 1 до ${count}, каждый по одному разу`;
   }
-  if (output.criteria.some(({ feedback }) => feedback.trim() === "")) return "пустой feedback";
-  if (output.criteria.some(({ feedback }) => feedback.length > MAX_FEEDBACK_LENGTH)) {
+  if (items.some(({ feedback }) => feedback.trim() === "")) return "пустой feedback";
+  if (items.some(({ feedback }) => feedback.length > MAX_FEEDBACK_LENGTH)) {
     return `feedback длиннее ${MAX_FEEDBACK_LENGTH} символов — нужно одно короткое предложение`;
   }
   return null;

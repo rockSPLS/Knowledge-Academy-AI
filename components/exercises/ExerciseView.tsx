@@ -1,6 +1,7 @@
 "use client";
 
 import type { PublicExercise, PublicFreeAnswer } from "@/lib/exercises/types";
+import { Calibration } from "./types/Calibration";
 import { CostedSelect } from "./types/CostedSelect";
 import { ExplainAnswer } from "./types/ExplainAnswer";
 import { ExplainSimply } from "./types/ExplainSimply";
@@ -35,6 +36,8 @@ export function ExerciseView({ exercise }: { exercise: PublicExercise }): React.
       return <PromptRewrite exercise={exercise} />;
     case "free-answer":
       return <FreeAnswerView exercise={exercise} />;
+    case "calibration":
+      return <Calibration exercise={exercise} />;
   }
 }
 

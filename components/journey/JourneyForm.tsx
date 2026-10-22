@@ -16,6 +16,7 @@ const DEV_FIXTURES = [
   { id: "photosynthesis", label: "Фотосинтез" },
   { id: "inflation", label: "Инфляция" },
   { id: "dough", label: "Тесто (текст со спорным утверждением)" },
+  { id: "vaccines", label: "Прививки" },
 ];
 const IS_DEV = process.env.NODE_ENV === "development";
 

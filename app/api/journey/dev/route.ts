@@ -1,6 +1,11 @@
 import { z } from "zod";
+import * as calibration from "@/lib/exercises/handlers/calibration";
 import * as freeAnswer from "@/lib/exercises/handlers/freeAnswer";
-import { MAX_FREE_ANSWER_LENGTH } from "@/lib/exercises/limits";
+import {
+  CALIBRATION_ITEMS_MAX,
+  MAX_CALIBRATION_ANSWER_LENGTH,
+  MAX_FREE_ANSWER_LENGTH,
+} from "@/lib/exercises/limits";
 import {
   fixtures,
   recordingJudge,
@@ -9,7 +14,7 @@ import {
   type Fixture,
 } from "@/lib/journey/fixtures";
 import { askModel, generateJourney, type AskModel } from "@/lib/journey/generate";
-import { askJudge, judgeAnswer } from "@/lib/journey/judge";
+import { askJudge, judgeAnswer, judgeCalibration } from "@/lib/journey/judge";
 import { toPublicJourney } from "@/lib/journey/public";
 import { sealJourney, unsealJourney } from "@/lib/journey/seal";
 import { MAX_SOURCE_LENGTH } from "@/lib/llm/limits";
@@ -23,6 +28,7 @@ import { modelFailureResponse, rateLimitedResponse } from "@/lib/llm/responses";
 // - { judge: { fixture, exerciseId, answer } } — настоящая оценка свободного ответа
 //   из сохранённого путешествия (подбор промпта оценщика); ответы модели возвращаются
 //   в поле recording в формате сохранённых оценок (поле judge в lib/journey/fixtures/);
+// - { judge: { fixture, exerciseId, answers: [{ text, confident }] } } — то же для калибровки;
 // - { responses: { description, source, plan, checkpoints } } — то же по ответам из запроса
 //   (проверка отдельных случаев: ошибка в ответе, повтор, отказ);
 // - { source, record: true } — настоящая генерация; ответы модели возвращаются
@@ -50,6 +56,15 @@ const requestSchema = z.union([
       fixture: z.string(),
       exerciseId: z.string(),
       answer: z.string().trim().min(1).max(MAX_FREE_ANSWER_LENGTH),
+    }),
+  }),
+  z.object({
+    judge: z.object({
+      fixture: z.string(),
+      exerciseId: z.string(),
+      answers: z
+        .array(z.object({ text: z.string().trim().min(1).max(MAX_CALIBRATION_ANSWER_LENGTH), confident: z.boolean() }))
+        .max(CALIBRATION_ITEMS_MAX),
     }),
   }),
 ]);
@@ -120,12 +135,15 @@ export async function POST(request: Request) {
   });
 }
 
-// Настоящая оценка свободного ответа из сохранённого путешествия — под тем же
+// Настоящая оценка свободного ответа или калибровки из сохранённого путешествия — под тем же
 // лимитом, что и обычная оценка
 async function judgeWithModel(
   request: Request,
-  { fixture: name, exerciseId, answer }: { fixture: string; exerciseId: string; answer: string },
+  judge:
+    | { fixture: string; exerciseId: string; answer: string }
+    | { fixture: string; exerciseId: string; answers: { text: string; confident: boolean }[] },
 ): Promise<Response> {
+  const { fixture: name, exerciseId } = judge;
   const fixture = fixtures[name];
   if (!fixture) return Response.json({ error: "Нет таких сохранённых ответов" }, { status: 404 });
   const built = await generateJourney(fixture.source, replayModel(fixture));
@@ -134,16 +152,34 @@ async function judgeWithModel(
     .flatMap((checkpoint) => checkpoint.exercises)
     .map((item) => item.exercise)
     .find((item) => item.id === exerciseId);
-  if (exercise?.type !== "free-answer") {
-    return Response.json({ error: "Нет такого свободного ответа" }, { status: 404 });
+  const responses: unknown[] = [];
+  const ask = recordingJudge(askJudge, responses);
+
+  if (exercise?.type === "calibration" && "answers" in judge) {
+    const answer = {
+      answers: Object.fromEntries(exercise.items.map((item, index) => [item.id, judge.answers[index]])),
+    };
+    if (judge.answers.length !== exercise.items.length || !calibration.isCompleteAnswer(exercise, answer)) {
+      return Response.json({ error: "Нужно по ответу на каждый вопрос" }, { status: 400 });
+    }
+    const limit = consumeEvaluationRequest(request);
+    if (!limit.ok) return rateLimitedResponse(limit.retryAfterSec);
+    const texts = calibration.answerTexts(exercise, answer);
+    const judged = await judgeCalibration(exercise, texts, ask, request.signal);
+    return Response.json({
+      result: judged.ok ? calibration.check(exercise, answer, judged.evaluation) : judged,
+      recording: { exerciseId, answer: texts.join("\n"), responses },
+    });
+  }
+  if (exercise?.type !== "free-answer" || !("answer" in judge)) {
+    return Response.json({ error: "Нет такого упражнения, которое оценивает ИИ" }, { status: 404 });
   }
 
   const limit = consumeEvaluationRequest(request);
   if (!limit.ok) return rateLimitedResponse(limit.retryAfterSec);
-  const responses: unknown[] = [];
-  const judged = await judgeAnswer(exercise, answer, recordingJudge(askJudge, responses), request.signal);
+  const judged = await judgeAnswer(exercise, judge.answer, ask, request.signal);
   return Response.json({
     result: judged.ok ? freeAnswer.check(exercise, judged.evaluation) : judged,
-    recording: { exerciseId, answer, responses },
+    recording: { exerciseId, answer: judge.answer, responses },
   });
 }

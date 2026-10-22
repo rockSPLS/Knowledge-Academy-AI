@@ -8,6 +8,7 @@ import * as orderSteps from "./handlers/orderSteps";
 import * as costedSelect from "./handlers/costedSelect";
 import * as promptRewrite from "./handlers/promptRewrite";
 import * as freeAnswer from "./handlers/freeAnswer";
+import * as calibration from "./handlers/calibration";
 
 // Единая точка серверной работы с упражнениями. Каждый тип описан своим
 // обработчиком в handlers/, здесь они только выбираются по полю `type`.
@@ -31,6 +32,8 @@ export function toPublicExercise(exercise: Exercise): PublicExercise {
       return promptRewrite.toPublic(exercise);
     case "free-answer":
       return freeAnswer.toPublic(exercise);
+    case "calibration":
+      return calibration.toPublic(exercise);
   }
 }
 
@@ -53,6 +56,8 @@ export function validateExercise(exercise: Exercise): string | null {
       return promptRewrite.validate(exercise);
     case "free-answer":
       return freeAnswer.validate(exercise);
+    case "calibration":
+      return calibration.validate(exercise);
   }
 }
 
@@ -71,8 +76,8 @@ export function checkAnswer(
   return applyRevealRule(result, reveal);
 }
 
-// Общее правило раскрытия — отдельно, потому что свободный ответ проверяется
-// не через checkAnswer (его оценивает модель), а правило у него то же
+// Общее правило раскрытия — отдельно, потому что свободный ответ и калибровка проверяются
+// не через checkAnswer (их оценивает модель), а правило у них то же
 export function applyRevealRule(result: CheckResult, reveal: boolean): CheckResult {
   if (reveal || result.verdict === "correct") return result;
   const withoutReview = { ...result };
@@ -110,9 +115,10 @@ function evaluate(exercise: Exercise, answer: unknown): CheckResult | null {
       const parsed = promptRewrite.answerSchema.safeParse(answer);
       return parsed.success ? promptRewrite.check(exercise, parsed.data) : null;
     }
-    // Свободный ответ оценивает модель, это запрос с лимитом частоты — его делает
+    // Свободный ответ и калибровку оценивает модель, это запрос с лимитом частоты — его делает
     // маршрут путешествия (app/api/journey/exercise), а не общая проверка
     case "free-answer":
+    case "calibration":
       return null;
   }
 }

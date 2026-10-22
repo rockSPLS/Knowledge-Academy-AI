@@ -30,7 +30,13 @@ export type ExerciseOutcome = {
   // Свободный ответ не удалось оценить (модель недоступна) — пропущен без оценки.
   // Если первая попытка была, засчитана она, иначе skipped = true
   unrated?: boolean;
+  // Калибровка уверенности: по каждому вопросу — был ли человек уверен и верен ли ответ.
+  // Из этих пар считаются вывод «когда вы уверены, вы правы в N из M», а в очках —
+  // уверенные ошибки и точность самооценки
+  calibration?: CalibrationMark[];
 };
+
+export type CalibrationMark = { confident: boolean; correct: boolean };
 
 // Прохождение чекпоинта: deadline — момент окончания времени (мс с 1970 г.);
 // timeLeftSec — сколько секунд осталось, когда чекпоинт закончен (для бонуса в очках)
@@ -70,6 +76,7 @@ export type JourneyAction =
       score: number;
       verdict: Verdict;
       explanation?: string;
+      calibration?: CalibrationMark[];
       now: number;
     }
   // Время вышло, а ответа нет; unrated — свободный ответ пропущен без оценки
@@ -122,6 +129,7 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
         attempts: count,
         explanation: action.explanation,
         skipped: false,
+        ...(action.calibration && { calibration: action.calibration }),
       });
     }
     case "skipped": {
@@ -206,6 +214,7 @@ const KNOWN_TYPES = new Set([
   "costed-select",
   "prompt-rewrite",
   "free-answer",
+  "calibration",
 ]);
 
 const VERDICTS = new Set(["correct", "partial", "incorrect"]);
@@ -228,7 +237,12 @@ const isOutcome = (o: unknown) =>
   VERDICTS.has(o.verdict as string) &&
   typeof o.explanation === "string" &&
   typeof o.skipped === "boolean" &&
-  (o.unrated === undefined || typeof o.unrated === "boolean");
+  (o.unrated === undefined || typeof o.unrated === "boolean") &&
+  (o.calibration === undefined ||
+    (Array.isArray(o.calibration) &&
+      o.calibration.every(
+        (mark) => isRecord(mark) && typeof mark.confident === "boolean" && typeof mark.correct === "boolean",
+      )));
 
 // Проверка сохранённого прогресса: страница не должна падать на испорченных данных.
 // Поля самих упражнений не проверяются — при смене формата повышается version

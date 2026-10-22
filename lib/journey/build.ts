@@ -1,7 +1,12 @@
 import "server-only";
 import { randomInt } from "node:crypto";
 import { validateExercise } from "@/lib/exercises/server";
-import { FREE_ANSWER_CRITERIA_MAX, FREE_ANSWER_CRITERIA_MIN } from "@/lib/exercises/limits";
+import {
+  CALIBRATION_ITEMS_MAX,
+  CALIBRATION_ITEMS_MIN,
+  FREE_ANSWER_CRITERIA_MAX,
+  FREE_ANSWER_CRITERIA_MIN,
+} from "@/lib/exercises/limits";
 import { normalizeText } from "@/lib/exercises/text";
 import type { Exercise } from "@/lib/exercises/types";
 import type {
@@ -33,6 +38,12 @@ const MAX_TEXT_LENGTH = 1500;
 // Допустимый ответ в пропуске не длиннее того, что можно ввести в поле
 // (схема ответа «Заполните пропуски» — до 60 символов)
 const MAX_BLANK_ANSWER_LENGTH = 60;
+// Калибровка — не дальше этого чекпоинта (с 1)
+const CALIBRATION_LAST_CHECKPOINT = 2;
+// Калибровка: правильный ответ — слово или фраза, не объяснение
+const MAX_CALIBRATION_EXPECTED_LENGTH = 120;
+// Задание калибровки одно и то же во всех путешествиях — его задаёт сервер, а не модель
+export const CALIBRATION_QUESTION = "Ответьте своими словами — хватит фразы — и отметьте, насколько уверены";
 
 export type BuildResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -68,6 +79,16 @@ export function checkPlan(plan: Plan): string | null {
   if (new Set(kinds).size !== kinds.length) {
     return "у свободных ответов в путешествии должны быть разные виды (freeAnswerKind)";
   }
+  // Калибровка — собственный тип путешествий: ровно одна в каждом. Её вывод
+  // «когда вы уверены, вы правы в N из M» и связанные с ней очки есть в любом путешествии.
+  // Не дальше второго чекпоинта: до неё доходит и тот, кто проходит путешествие не до конца
+  const calibrations = plan.checkpoints.flatMap((checkpoint, index) =>
+    checkpoint.exerciseTypes.includes("calibration") ? [index + 1] : [],
+  );
+  if (calibrations.length !== 1) return "calibration — ровно в одном чекпоинте путешествия";
+  if (calibrations[0] > CALIBRATION_LAST_CHECKPOINT) {
+    return `calibration — во втором чекпоинте (или в первом), а не в ${calibrations[0]}-м`;
+  }
   return null;
 }
 
@@ -87,6 +108,14 @@ function checkPlanCheckpoint(checkpoint: PlanCheckpoint, number: number): string
     return `нужно ${EXERCISES_MIN}–${EXERCISES_MAX} типа упражнений`;
   }
   if (new Set(types).size !== types.length) return "типы упражнений в чекпоинте повторяются";
+  // Обе проверяют, верно ли утверждение или ответ, — в одном чекпоинте это повтор
+  if (types.includes("calibration") && types.includes("true-false")) {
+    return "calibration и true-false не ставятся в один чекпоинт";
+  }
+  // Вопросы калибровки строятся на заблуждениях — без них уверенно ошибиться не на чем
+  if (types.includes("calibration") && !checkpoint.misconceptions.some((item) => !isBlank(item))) {
+    return "calibration — только в чекпоинте, где в misconceptions есть заблуждение";
+  }
   if (types.includes("free-answer") === (checkpoint.freeAnswerKind === "none")) {
     return "freeAnswerKind — вид свободного ответа, если в exerciseTypes есть free-answer, иначе none";
   }
@@ -333,6 +362,32 @@ function buildExerciseBody(
         question,
         criteria: criteria.map((text, index) => ({ id: `k${index + 1}`, text })),
         sample: item.sample.trim(),
+        explanation,
+      });
+    }
+
+    case "calibration": {
+      const items = item.items;
+      if (items.length < CALIBRATION_ITEMS_MIN || items.length > CALIBRATION_ITEMS_MAX) {
+        return fail(`нужно от ${CALIBRATION_ITEMS_MIN} до ${CALIBRATION_ITEMS_MAX} вопросов`);
+      }
+      if (items.some((entry) => isBlank(entry.question) || isBlank(entry.answer))) {
+        return fail("у каждого вопроса нужны question и answer");
+      }
+      if (hasDuplicates(items.map((entry) => entry.question))) return fail("вопросы повторяются");
+      if (items.some((entry) => entry.answer.trim().length > MAX_CALIBRATION_EXPECTED_LENGTH)) {
+        return fail(`answer — короткий ответ, не длиннее ${MAX_CALIBRATION_EXPECTED_LENGTH} символов`);
+      }
+      // Порядок вопросов — как у модели: ответы не перемешиваются, подсказывать нечему
+      return ok({
+        id,
+        type: "calibration",
+        question: CALIBRATION_QUESTION,
+        items: items.map((entry, index) => ({
+          id: `q${index + 1}`,
+          question: entry.question.trim(),
+          answer: entry.answer.trim(),
+        })),
         explanation,
       });
     }

@@ -1,9 +1,16 @@
 import { z } from "zod";
+import * as calibration from "@/lib/exercises/handlers/calibration";
 import * as freeAnswer from "@/lib/exercises/handlers/freeAnswer";
 import { applyRevealRule, checkAnswer } from "@/lib/exercises/server";
-import type { FreeAnswerExercise } from "@/lib/exercises/types";
+import type { CalibrationExercise, FreeAnswerExercise } from "@/lib/exercises/types";
 import { fixtureJudge } from "@/lib/journey/fixtures";
-import { judgeAnswer, openEvaluation, sealEvaluation } from "@/lib/journey/judge";
+import {
+  judgeAnswer,
+  judgeCalibration,
+  openEvaluation,
+  sealEvaluation,
+  type AskJudge,
+} from "@/lib/journey/judge";
 import { isSealConfigured, unsealJourney } from "@/lib/journey/seal";
 import type { Journey, JourneyExercise } from "@/lib/journey/types";
 import { consumeEvaluationRequest } from "@/lib/llm/rateLimit";
@@ -17,17 +24,19 @@ import { judgeFailureResponse, rateLimitedResponse } from "@/lib/llm/responses";
 //   разбор с правильными ответами — только при верном ответе или reveal = true;
 //   у свободного ответа ещё evaluation — запечатанная оценка прошлой попытки
 //   (раскрытие без нового запроса к модели), в ответе — новая запечатанная оценка;
+//   калибровку тоже оценивает модель, разбор приходит сразу (попытка одна);
 // - { action: "hint" } — подсказка к упражнению;
 // - { action: "skip" } — время вышло, а ответа нет (или свободный ответ не удалось
-//   оценить): только общее объяснение, у свободного ответа — ещё и образец.
-// Модель вызывается только для оценки свободного ответа — у неё свой лимит частоты;
+//   оценить): только общее объяснение, у свободного ответа — ещё и образец,
+//   у калибровки — правильные ответы.
+// Модель вызывается только для оценки свободного ответа и калибровки — у неё свой лимит частоты;
 // остальное проверяется без модели и без лимита (как и /api/check).
 
 // Зашифрованное путешествие обычно 15–35 КБ, но бывает до ~270 КБ — лимит с запасом.
 // Обычный лимит запросов к модели (MAX_REQUEST_BYTES) рассчитан на текст пользователя и меньше
 const MAX_BODY_BYTES = 400_000;
 
-// Оценка свободного ответа — до двух запросов к модели по 25 с (lib/journey/judge.ts)
+// Оценка ответа моделью — до двух запросов по 25 с (lib/journey/judge.ts)
 export const maxDuration = 60;
 
 const base = {
@@ -88,6 +97,9 @@ export async function POST(request: Request) {
       if (found.exercise.type === "free-answer") {
         return checkFreeAnswer(request, journey, found.exercise, parsed.data);
       }
+      if (found.exercise.type === "calibration") {
+        return checkCalibration(request, journey, found.exercise, parsed.data.answer);
+      }
       const result = checkAnswer(found.exercise, parsed.data.answer, parsed.data.reveal ?? false);
       if (!result) {
         return Response.json(
@@ -100,12 +112,21 @@ export async function POST(request: Request) {
   }
 }
 
-// Свободный ответ: образец — после объяснения, отдельным абзацем
+// Свободный ответ: образец — после объяснения, отдельным абзацем; калибровка — правильные ответы
 function skipExplanation(exercise: JourneyExercise["exercise"]): string {
-  if (exercise.type !== "free-answer") return exercise.explanation;
-  return `${exercise.explanation}
+  if (exercise.type === "free-answer") {
+    return `${exercise.explanation}
 
 Образец ответа: ${exercise.sample}`;
+  }
+  if (exercise.type === "calibration") {
+    const answers = exercise.items.map((item) => `— ${item.question} Ответ: ${item.answer}`).join("\n");
+    return `${exercise.explanation}
+
+Правильные ответы:
+${answers}`;
+  }
+  return exercise.explanation;
 }
 
 // Свободный ответ оценивает модель. Раскрытие после уже оценённой попытки берёт
@@ -127,19 +148,55 @@ async function checkFreeAnswer(
 
   let evaluation = data.evaluation ? openEvaluation(data.evaluation, binding) : null;
   if (!evaluation) {
-    // При разработке путешествие из сохранённых ответов оценивается по ним же — без лимита
-    const replay = fixtureJudge(journey);
-    if (!replay) {
-      const limit = consumeEvaluationRequest(request);
-      if (!limit.ok) return rateLimitedResponse(limit.retryAfterSec);
-    }
-    const judged = await judgeAnswer(exercise, answer.data.text, replay ?? undefined, request.signal);
+    const replay = judgeFor(request, journey);
+    if (!replay.ok) return replay.response;
+    const judged = await judgeAnswer(exercise, answer.data.text, replay.ask, request.signal);
     if (!judged.ok) return judgeFailureResponse(judged.reason);
     evaluation = judged.evaluation;
   }
 
   const result = applyRevealRule(freeAnswer.check(exercise, evaluation), data.reveal ?? false);
   return Response.json({ ...result, evaluation: sealEvaluation(binding, evaluation) });
+}
+
+// Калибровку тоже оценивает модель. Попытка одна, поэтому разбор отдаётся сразу
+// и запечатывать оценку для раскрытия не нужно
+async function checkCalibration(
+  request: Request,
+  journey: Journey,
+  exercise: CalibrationExercise,
+  rawAnswer: unknown,
+): Promise<Response> {
+  const answer = calibration.answerSchema.safeParse(rawAnswer);
+  if (!answer.success || !calibration.isCompleteAnswer(exercise, answer.data)) {
+    return Response.json(
+      { code: "bad-request", error: "Ответ не подходит для этого упражнения" },
+      { status: 400 },
+    );
+  }
+  const replay = judgeFor(request, journey);
+  if (!replay.ok) return replay.response;
+  const judged = await judgeCalibration(
+    exercise,
+    calibration.answerTexts(exercise, answer.data),
+    replay.ask,
+    request.signal,
+  );
+  if (!judged.ok) return judgeFailureResponse(judged.reason);
+  return Response.json(calibration.check(exercise, answer.data, judged.evaluation));
+}
+
+// Кто оценивает: при разработке путешествие из сохранённых ответов оценивается по ним же —
+// без лимита; иначе настоящая модель, и запрос расходует лимит оценки
+function judgeFor(
+  request: Request,
+  journey: Journey,
+): { ok: true; ask: AskJudge | undefined } | { ok: false; response: Response } {
+  const replay = fixtureJudge(journey);
+  if (replay) return { ok: true, ask: replay };
+  const limit = consumeEvaluationRequest(request);
+  if (!limit.ok) return { ok: false, response: rateLimitedResponse(limit.retryAfterSec) };
+  return { ok: true, ask: undefined };
 }
 
 function findExercise(
