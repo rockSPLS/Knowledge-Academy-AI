@@ -61,44 +61,48 @@
   --plant-core: #fac775;
 }
 
-[data-theme="dark"] {
-  /* Родные элементы форм (чекбоксы, полосы прокрутки) тоже становятся тёмными */
-  color-scheme: dark;
+/* Тёмная тема — только на экране: печать (итоги путешествия, «Печать / PDF»)
+   всегда светлая, со светлыми токенами выше */
+@media not print {
+  [data-theme="dark"] {
+    /* Родные элементы форм (чекбоксы, полосы прокрутки) тоже становятся тёмными */
+    color-scheme: dark;
 
-  --background: #0b0b0f;
-  --foreground: #ededed;
-  --surface: #16161d;
-  --muted: #a1a1aa;
-  --subtle: #8b8b95;
-  --border: #27272a;
-  --border-strong: #3f3f46;
+    --background: #0b0b0f;
+    --foreground: #ededed;
+    --surface: #16161d;
+    --muted: #a1a1aa;
+    --subtle: #8b8b95;
+    --border: #27272a;
+    --border-strong: #3f3f46;
 
-  /* Ссылки и значки — светлый индиго (читается на тёмном фоне),
-     кнопки — насыщенный индиго с белым текстом */
-  --accent: #818cf8;
-  --accent-hover: #a5b4fc;
-  --accent-fill: #4f46e5;
-  /* При наведении в тёмной теме кнопка светлеет (на тёмном фоне затемнение выглядело бы как «погасла») */
-  --accent-fill-hover: #6159ee;
-  --accent-fill-foreground: #ffffff;
-  --accent-soft: #1e1b4b;
-  --accent-soft-foreground: #c7d2fe;
+    /* Ссылки и значки — светлый индиго (читается на тёмном фоне),
+       кнопки — насыщенный индиго с белым текстом */
+    --accent: #818cf8;
+    --accent-hover: #a5b4fc;
+    --accent-fill: #4f46e5;
+    /* При наведении в тёмной теме кнопка светлеет (на тёмном фоне затемнение выглядело бы как «погасла») */
+    --accent-fill-hover: #6159ee;
+    --accent-fill-foreground: #ffffff;
+    --accent-soft: #1e1b4b;
+    --accent-soft-foreground: #c7d2fe;
 
-  --success: #4ade80;
-  --success-soft: #052e16;
-  --success-border: #166534;
-  --warning: #fbbf24;
-  --warning-soft: #2d1a05;
-  --warning-border: #92400e;
-  --danger: #f87171;
-  --danger-soft: #2d0a0a;
-  --danger-border: #991b1b;
+    --success: #4ade80;
+    --success-soft: #052e16;
+    --success-border: #166534;
+    --warning: #fbbf24;
+    --warning-soft: #2d1a05;
+    --warning-border: #92400e;
+    --danger: #f87171;
+    --danger-soft: #2d0a0a;
+    --danger-border: #991b1b;
 
-  /* Ствол и горшок светлее, чтобы не терялись на тёмном фоне */
-  --plant-trunk: #9a6a2e;
-  --plant-pot: #6159ee;
-  --plant-pot-edge: #4f46e5;
-  --plant-pot-light: #a5b4fc;
+    /* Ствол и горшок светлее, чтобы не терялись на тёмном фоне */
+    --plant-trunk: #9a6a2e;
+    --plant-pot: #6159ee;
+    --plant-pot-edge: #4f46e5;
+    --plant-pot-light: #a5b4fc;
+  }
 }
 
 @theme inline {

@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowRight, CircleCheck, Clock, Flag, TriangleAlert } from "lucide-react";
 import { ExerciseView } from "@/components/exercises/ExerciseView";
-import { VERDICTS } from "@/components/exercises/ExerciseShell";
 import { plural } from "@/lib/plural";
 import { checkpointSeconds, formatTime } from "@/lib/journey/timing";
 import type { CheckResult } from "@/lib/exercises/types";
 import type { PublicCheckpoint } from "@/lib/journey/types";
+import { AnswerRecord } from "./AnswerRecord";
 import { checkJourneyAnswer, fetchHint, fetchSkipExplanation } from "./api";
 import { CheckpointTimer } from "./CheckpointTimer";
 import {
@@ -21,16 +21,9 @@ import {
   type ExercisePoints,
 } from "./gamification";
 import { CompanionAside, GROW_TEXT, MiniSakura, pointsText, ScoreLine } from "./JourneyCompanion";
-import { skippedLabel } from "./outcomeLabels";
 import { Sakura } from "./Sakura";
 import { JourneyExerciseContext, type JourneyExerciseApi } from "./JourneyExerciseContext";
-import {
-  isCheckpointDone,
-  type CalibrationMark,
-  type ExerciseOutcome,
-  type JourneyAction,
-  type JourneyProgress,
-} from "./state";
+import { isCheckpointDone, type CalibrationMark, type JourneyAction, type JourneyProgress } from "./state";
 
 // Чекпоинт путешествия: все его упражнения сразу под липкой полосой времени.
 // Каждое упражнение проверяется сразу; когда все получили итог, время останавливается
@@ -69,7 +62,7 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
   }, [isTimeUp, isDone, deadline, pausedAt]);
 
   // Упражнения, у которых итог был ещё до открытия страницы (страницу перезагрузили):
-  // их ответ не сохраняется, поэтому показываем итог и объяснение
+  // показываются компактной записью — вопрос, ответ, разбор, как в итогах путешествия
   const [restored] = useState(
     () =>
       new Set(
@@ -192,7 +185,7 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
           if (pauses) endPause();
         }
       },
-      recordCheck: (id, result, attempt) =>
+      recordCheck: (id, result, attempt, answer) =>
         safeDispatch({
           type: "checked",
           exerciseId: id,
@@ -201,11 +194,13 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
           verdict: result.verdict,
           explanation: result.review?.explanation,
           calibration: calibrationMarks(result),
+          answer,
+          details: result.review?.details,
           now: Date.now(),
         }),
-      skip: async (id, unrated = false) => {
+      skip: async (id, unrated = false, answer) => {
         const explanation = await fetchSkipExplanation(sealed, id);
-        safeDispatch({ type: "skipped", exerciseId: id, explanation, unrated, now: Date.now() });
+        safeDispatch({ type: "skipped", exerciseId: id, explanation, unrated, answer, now: Date.now() });
       },
       outcomeFor: (id) => progress.outcomes[id],
       hintFor: (id) => progress.hints[id],
@@ -249,10 +244,12 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
       <JourneyExerciseContext.Provider value={api}>
         {checkpoint.exercises.map(({ exercise }) =>
           restored.has(exercise.id) ? (
-            <RestoredExercise
+            <AnswerRecord
               key={exercise.id}
-              question={exercise.question}
+              exercise={exercise}
               outcome={progress.outcomes[exercise.id]}
+              hint={Object.hasOwn(progress.hints, exercise.id)}
+              className="my-8"
             />
           ) : (
             <ExerciseView key={exercise.id} exercise={exercise} />
@@ -308,30 +305,6 @@ function calibrationMarks(result: CheckResult): CalibrationMark[] | undefined {
   const details = result.review?.details;
   if (details?.type !== "calibration") return undefined;
   return Object.values(details.items).map(({ confident, correct }) => ({ confident, correct }));
-}
-
-// Упражнение с итогом, полученным до перезагрузки страницы
-function RestoredExercise({ question, outcome }: { question: string; outcome: ExerciseOutcome }) {
-  const verdict = VERDICTS[outcome.verdict];
-  return (
-    <section className="my-8 rounded-xl border border-border bg-surface p-5 text-sm">
-      <p className="text-base font-semibold">{question}</p>
-      <p className={`mt-3 inline-flex items-center gap-1.5 font-semibold ${outcome.skipped ? "text-muted" : verdict.className}`}>
-        {outcome.skipped ? (
-          outcome.unrated ? <TriangleAlert size={18} aria-hidden="true" /> : <Clock size={18} aria-hidden="true" />
-        ) : (
-          <verdict.Icon size={18} aria-hidden="true" />
-        )}
-        {outcome.skipped ? skippedLabel(outcome) : verdict.label}
-        {outcome.attempts > 1 && <span className="font-normal text-muted">· со второй попытки</span>}
-      </p>
-      {outcome.unrated && !outcome.skipped && (
-        <p className="mt-1 text-muted">{skippedLabel(outcome)}</p>
-      )}
-      {/* В объяснении свободного ответа образец — отдельным абзацем */}
-      <p className="mt-2 whitespace-pre-line text-muted">{outcome.explanation}</p>
-    </section>
-  );
 }
 
 // Итог чекпоинта: сколько верно, сколько времени осталось, разбор очков, конспект
@@ -417,7 +390,7 @@ function CheckpointSummary({
       ) : (
         <button
           type="button"
-          onClick={() => dispatch({ type: "finish" })}
+          onClick={() => dispatch({ type: "finish", now: Date.now() })}
           className="inline-flex items-center gap-2 rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-accent-fill-foreground transition-colors hover:bg-accent-fill-hover"
         >
           Завершить путешествие

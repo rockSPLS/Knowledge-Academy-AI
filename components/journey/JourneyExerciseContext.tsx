@@ -16,11 +16,13 @@ export type JourneyExerciseApi = {
   attemptsUsed: (exerciseId: string) => number;
   check: (exerciseId: string, answer: unknown, reveal: boolean) => Promise<CheckResult>;
   // Запоминает попытку (номер или "same" — раскрытие ответа, не новая попытка);
-  // если в результате есть разбор — это итог упражнения
-  recordCheck: (exerciseId: string, result: CheckResult, attempt: number | "same") => void;
+  // если в результате есть разбор — это итог упражнения. answer — проверенный ответ:
+  // он сохраняется вместе с итогом
+  recordCheck: (exerciseId: string, result: CheckResult, attempt: number | "same", answer: unknown) => void;
   // Время вышло, а ответа нет: запрашивает объяснение и записывает итог «не успели».
-  // unrated — свободный ответ или калибровка пропущены без оценки, потому что модель недоступна
-  skip: (exerciseId: string, unrated?: boolean) => Promise<void>;
+  // unrated — свободный ответ или калибровка пропущены без оценки, потому что модель недоступна;
+  // answer — ответ, который не удалось оценить (сохраняется с итогом)
+  skip: (exerciseId: string, unrated?: boolean, answer?: unknown) => Promise<void>;
   outcomeFor: (exerciseId: string) => ExerciseOutcome | undefined;
   hintFor: (exerciseId: string) => string | undefined;
   requestHint: (exerciseId: string) => Promise<void>;

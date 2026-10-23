@@ -10,7 +10,7 @@ import { ThemeToggle } from "./ThemeToggle";
 
 export function SiteHeader() {
   return (
-    <header className="border-b border-border">
+    <header className="border-b border-border print:hidden">
       <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3">
         <Link href="/" className="inline-flex items-center gap-2 font-semibold hover:text-accent">
           <LogoMark size={36} />

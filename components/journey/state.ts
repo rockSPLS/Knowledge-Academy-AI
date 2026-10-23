@@ -1,4 +1,4 @@
-import type { Verdict } from "@/lib/exercises/types";
+import type { ExerciseReviewDetails, Verdict } from "@/lib/exercises/types";
 import { checkpointSeconds } from "@/lib/journey/timing";
 import type { PublicJourney } from "@/lib/journey/types";
 
@@ -34,6 +34,13 @@ export type ExerciseOutcome = {
   // Из этих пар считаются вывод «когда вы уверены, вы правы в N из M», а в очках —
   // уверенные ошибки и точность самооценки
   calibration?: CalibrationMark[];
+  // Ответ человека (в формате ответа своего типа упражнения) и разбор сервера —
+  // для карточки после перезагрузки страницы и для итогов путешествия.
+  // Нет ответа — время вышло без ответа; нет разбора — его не было (пропуск без оценки:
+  // тогда ответ — тот, что не удалось оценить, или засчитанной первой попытки).
+  // В прогрессе, сохранённом до появления этих полей, их нет
+  answer?: unknown;
+  details?: ExerciseReviewDetails;
 };
 
 export type CalibrationMark = { confident: boolean; correct: boolean };
@@ -45,7 +52,8 @@ export type CheckpointRun = {
   timeLeftSec?: number;
 };
 
-export type AttemptRecord = { count: number; score: number; verdict: Verdict };
+// answer — ответ последней попытки: если её итог станет итогом упражнения, ответ сохранится с ним
+export type AttemptRecord = { count: number; score: number; verdict: Verdict; answer?: unknown };
 
 export type JourneyProgress = {
   version: 1;
@@ -60,6 +68,9 @@ export type JourneyProgress = {
   outcomes: Record<string, ExerciseOutcome>;
   // Открытые подсказки
   hints: Record<string, string>;
+  // Когда нажали «Завершить путешествие» (мс с 1970 г.) — дата в итогах.
+  // В прогрессе, сохранённом до появления поля, его нет
+  finishedAt?: number;
 };
 
 export type JourneyAction =
@@ -77,14 +88,17 @@ export type JourneyAction =
       verdict: Verdict;
       explanation?: string;
       calibration?: CalibrationMark[];
+      answer: unknown;
+      details?: ExerciseReviewDetails;
       now: number;
     }
-  // Время вышло, а ответа нет; unrated — свободный ответ пропущен без оценки
-  | { type: "skipped"; exerciseId: string; explanation: string; unrated: boolean; now: number }
+  // Время вышло, а ответа нет; unrated — свободный ответ пропущен без оценки,
+  // answer — ответ, который не удалось оценить
+  | { type: "skipped"; exerciseId: string; explanation: string; unrated: boolean; answer?: unknown; now: number }
   | { type: "hint"; exerciseId: string; hint: string }
   // Время чекпоинта стояло, пока ИИ оценивал ответ: момент окончания сдвигается на паузу
   | { type: "extendDeadline"; checkpointId: string; ms: number }
-  | { type: "finish" }
+  | { type: "finish"; now: number }
   | { type: "discard" };
 
 // undefined — состояние ещё не прочитано из localStorage
@@ -119,9 +133,15 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
       if (Object.hasOwn(state.outcomes, action.exerciseId)) return state;
       const count =
         action.attempt === "same" ? (state.attempts[action.exerciseId]?.count ?? 1) : action.attempt;
+      // Ответ в попытке нужен, только пока итога нет (его может засчитать пропуск); с итогом он хранится в итоге
       const attempts = {
         ...state.attempts,
-        [action.exerciseId]: { count, score: action.score, verdict: action.verdict },
+        [action.exerciseId]: {
+          count,
+          score: action.score,
+          verdict: action.verdict,
+          ...(action.explanation === undefined && { answer: action.answer }),
+        },
       };
       const next = { ...state, attempts };
       if (action.explanation === undefined) return next;
@@ -132,12 +152,16 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
         explanation: action.explanation,
         skipped: false,
         ...(action.calibration && { calibration: action.calibration }),
+        answer: action.answer,
+        ...(action.details && { details: action.details }),
       });
     }
     case "skipped": {
       if (Object.hasOwn(state.outcomes, action.exerciseId)) return state;
       // Первая попытка была, а вторую не успели — засчитывается первая
       const last = state.attempts[action.exerciseId];
+      // Засчитана первая попытка — и ответ её; иначе — ответ, который не удалось оценить
+      const answer = last ? last.answer : action.answer;
       return addOutcome(state, action.exerciseId, action.now, {
         score: last?.score ?? 0,
         verdict: last?.verdict ?? "incorrect",
@@ -145,6 +169,7 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
         explanation: action.explanation,
         skipped: last === undefined,
         ...(action.unrated && { unrated: true }),
+        ...(answer !== undefined && { answer }),
       });
     }
     case "hint":
@@ -159,7 +184,7 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
       };
     }
     case "finish":
-      return { ...state, stage: { kind: "finished" } };
+      return { ...state, stage: { kind: "finished" }, finishedAt: state.finishedAt ?? action.now };
   }
 }
 
@@ -249,6 +274,7 @@ const isOutcome = (o: unknown) =>
   typeof o.explanation === "string" &&
   typeof o.skipped === "boolean" &&
   (o.unrated === undefined || typeof o.unrated === "boolean") &&
+  (o.details === undefined || (isRecord(o.details) && typeof o.details.type === "string")) &&
   (o.calibration === undefined ||
     (Array.isArray(o.calibration) &&
       o.calibration.every(
@@ -260,6 +286,7 @@ const isOutcome = (o: unknown) =>
 function isValidProgress(value: unknown): value is JourneyProgress {
   const p = value as JourneyProgress;
   if (!isRecord(p) || p.version !== 1 || typeof p.sealed !== "string") return false;
+  if (p.finishedAt !== undefined && !Number.isFinite(p.finishedAt)) return false;
   if (!isRecord(p.journey) || typeof p.journey.title !== "string" || !Array.isArray(p.journey.doubts)) {
     return false;
   }

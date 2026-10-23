@@ -24,8 +24,8 @@ const CONFIDENCE = [
 // Уверенная ошибка — своя отметка: это главное, что показывает упражнение
 const CONFIDENT_WRONG_MARK: ReviewMark = { ...REVIEW_MARKS.wrong, Icon: TriangleAlert };
 
-// Отметка и подпись по сочетанию «уверенность — верно ли»
-function itemMark(confident: boolean, correct: boolean): { mark: ReviewMark; label: string } {
+// Отметка и подпись по сочетанию «уверенность — верно ли» (и в итогах путешествия)
+export function itemMark(confident: boolean, correct: boolean): { mark: ReviewMark; label: string } {
   if (correct) {
     return {
       mark: REVIEW_MARKS.correct,
@@ -206,7 +206,8 @@ export function Calibration({ exercise }: { exercise: PublicCalibration }) {
 }
 
 // Вывод упражнения: насколько уверенность совпала с тем, что вы знаете на самом деле
-function CalibrationSummary({ items }: { items: { confident: boolean; correct: boolean }[] }) {
+// (и в итогах путешествия)
+export function CalibrationSummary({ items }: { items: { confident: boolean; correct: boolean }[] }) {
   const confident = items.filter((item) => item.confident);
   const confidentCorrect = confident.filter((item) => item.correct).length;
   const unsure = items.filter((item) => !item.confident);

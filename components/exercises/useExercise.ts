@@ -90,7 +90,7 @@ export function useExercise<TAnswer>(
         const attempt = journey.attemptsUsed(exerciseId) + 1;
         const isLast = attempt >= journey.maxAttempts(exerciseId) || journey.readTimeUp();
         const checked = await journey.check(exerciseId, answer, isLast);
-        journey.recordCheck(exerciseId, checked, attempt);
+        journey.recordCheck(exerciseId, checked, attempt, answer);
         setResult(checked);
         setStatus("checked");
         // Время вышло, пока ответ проверялся, — второй попытки уже не будет
@@ -123,7 +123,7 @@ export function useExercise<TAnswer>(
       if (journey) {
         const revealed = await journey.check(exerciseId, lastAnswer.current, true);
         // Раскрытие — не новая попытка: итог остаётся за последней
-        journey.recordCheck(exerciseId, revealed, "same");
+        journey.recordCheck(exerciseId, revealed, "same", lastAnswer.current);
         setResult(revealed);
       } else {
         setResult(await requestCheck(exerciseId, lastAnswer.current, true));
@@ -158,7 +158,8 @@ export function useExercise<TAnswer>(
     setStatus("skipping");
     setErrorMessage(null);
     try {
-      await journey.skip(exerciseId, unrated);
+      // Без оценки пропускается уже написанный ответ — он сохранится с итогом
+      await journey.skip(exerciseId, unrated, unrated ? (lastAnswer.current ?? undefined) : undefined);
       setStatus("skipped");
       return true;
     } catch (error) {

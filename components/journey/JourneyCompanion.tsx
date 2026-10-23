@@ -9,7 +9,7 @@ import { Sakura } from "./Sakura";
 const STREAK_TEXT = factorText(STREAK_FACTOR);
 
 // Пояснение к сакуре: что её растит и что поправимо
-export const GROW_TEXT = "Растите своё дерево знаний: верный ответ — новые листья, ошибка их желтит. Это поправимо.";
+export const GROW_TEXT = "Растите своё дерево знаний: верный ответ — новые листья, а ошибка их желтит (но это поправимо).";
 
 export function pointsText(points: number): string {
   return `${points} ${plural(points, ["очко", "очка", "очков"])}`;
