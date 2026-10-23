@@ -1,6 +1,13 @@
 import "server-only";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { APICallError, generateText, NoObjectGeneratedError, Output, RetryError } from "ai";
+import {
+  APICallError,
+  generateText,
+  NoObjectGeneratedError,
+  NoOutputGeneratedError,
+  Output,
+  RetryError,
+} from "ai";
 import type { z } from "zod";
 
 // Единая точка вызова языковой модели. Подходит любой провайдер с API,
@@ -20,13 +27,16 @@ export type ModelResult<T> = { ok: true; data: T } | { ok: false; reason: ModelF
 
 // Настройки читаются при каждом вызове, а не при запуске: без них сервер
 // стартует как обычно, а генерация просто сообщает, что недоступна.
-// Нужны все три — без любой из них модель считается не настроенной
+// Нужны все три — без любой из них модель считается не настроенной.
+// AI_REASONING_EFFORT необязательна: уровень размышлений для «рассуждающих» моделей
+// (low / medium / high); не задана — параметр не отправляется, ведь не все модели его принимают
 function readConfig() {
   const apiKey = process.env.AI_API_KEY?.trim();
   const baseURL = process.env.AI_BASE_URL?.trim();
   const model = process.env.AI_MODEL?.trim();
+  const reasoningEffort = process.env.AI_REASONING_EFFORT?.trim().toLowerCase() || undefined;
   if (!apiKey || !baseURL || !model) return null;
-  return { apiKey, baseURL, model };
+  return { apiKey, baseURL, model, reasoningEffort };
 }
 
 // Запрашивает у модели ответ по zod-схеме. Не бросает исключений: ошибки
@@ -69,6 +79,10 @@ export async function generateStructured<T>({
       timeout: timeoutMs,
       maxOutputTokens,
       abortSignal,
+      // Ключ "model" — имя провайдера выше; библиотека передаёт это как reasoning_effort
+      providerOptions: config.reasoningEffort
+        ? { model: { reasoningEffort: config.reasoningEffort } }
+        : undefined,
     });
     return { ok: true, data: output };
   } catch (error) {
@@ -77,6 +91,12 @@ export async function generateStructured<T>({
     if (NoObjectGeneratedError.isInstance(error)) {
       // finishReason показывает, обрезан ли ответ по длине (length) или модель остановилась сама
       console.error(`[model] ответ модели не подошёл под схему (finishReason: ${error.finishReason ?? "?"})`);
+      return { ok: false, reason: "invalid-output" };
+    }
+    if (NoOutputGeneratedError.isInstance(error)) {
+      // Модель ответила, но без текста: обычно «рассуждающая» модель истратила весь потолок
+      // длины на скрытый черновик. Это сбой ответа, а не недоступность — его стоит повторить
+      console.error("[model] модель вернула пустой ответ (часто — истратила потолок длины на рассуждение)");
       return { ok: false, reason: "invalid-output" };
     }
     console.error(`[model] модель недоступна: ${describeError(error)}`);

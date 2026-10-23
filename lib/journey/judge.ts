@@ -100,7 +100,7 @@ export function judgeAnswer(
         ok: true,
         evaluation: [...output.criteria]
           .sort((a, b) => a.criterion - b.criterion)
-          .map(({ met, feedback }) => ({ met, feedback: feedback.trim() })),
+          .map(({ met, feedback }) => ({ met, feedback: stripVerdict(feedback) })),
       };
     },
   );
@@ -134,7 +134,7 @@ export function judgeCalibration(
         ok: true,
         evaluation: [...output.items]
           .sort((a, b) => a.item - b.item)
-          .map(({ correct, feedback }) => ({ correct, feedback: feedback.trim() })),
+          .map(({ correct, feedback }) => ({ correct, feedback: stripVerdict(feedback) })),
       };
     },
   );
@@ -198,6 +198,23 @@ function checkNumbered(
     return `feedback длиннее ${MAX_FEEDBACK_LENGTH} символов — нужно одно короткое предложение`;
   }
   return null;
+}
+
+// Итог («Есть» / «Не хватает», «Верно» / «Неверно») интерфейс показывает рядом с отзывом.
+// Промпт просит начинать с сути, но модель иногда всё же пишет «Верно: …» — такое начало
+// убираем, чтобы итог не повторялся. Не трогаем, где слово — часть фразы:
+// «Неверно названа причина» (нет знака после слова), «Неверно, что кислород…» (после запятой —
+// придаточное: без «Неверно» смысл перевернулся бы)
+const VERDICT_PREFIX =
+  /^(?:верно|неверно|правильно|неправильно)(?:\s*[:.!—–-]+|\s*,(?!\s*(?:что|как|когда|ли|если)(?!\p{L})))\s*/iu;
+
+function stripVerdict(feedback: string): string {
+  const text = feedback.trim();
+  const rest = text.replace(VERDICT_PREFIX, "");
+  if (rest === text || rest === "") return text;
+  // Первую букву — заглавной, но не ломаем обозначения вроде «мРНК» или «pH»
+  if (rest.length > 1 && rest[1] !== rest[1].toLowerCase()) return rest;
+  return rest[0].toUpperCase() + rest.slice(1);
 }
 
 // ---------- Запечатанная оценка ----------
