@@ -7,7 +7,7 @@ import { plural } from "@/lib/plural";
 import { checkpointSeconds, formatTime } from "@/lib/journey/timing";
 import type { CheckResult } from "@/lib/exercises/types";
 import type { PublicCheckpoint } from "@/lib/journey/types";
-import { AnswerRecord } from "./AnswerRecord";
+import { AnswerRecord, typeLabel } from "./AnswerRecord";
 import { checkJourneyAnswer, fetchHint, fetchSkipExplanation } from "./api";
 import { CheckpointTimer } from "./CheckpointTimer";
 import {
@@ -23,7 +23,13 @@ import {
 import { CompanionAside, GROW_TEXT, MiniSakura, pointsText, ScoreLine } from "./JourneyCompanion";
 import { Sakura } from "./Sakura";
 import { JourneyExerciseContext, type JourneyExerciseApi } from "./JourneyExerciseContext";
-import { isCheckpointDone, type CalibrationMark, type JourneyAction, type JourneyProgress } from "./state";
+import {
+  isCheckpointDone,
+  type CalibrationMark,
+  type ExerciseOutcome,
+  type JourneyAction,
+  type JourneyProgress,
+} from "./state";
 
 // Чекпоинт путешествия: все его упражнения сразу под липкой полосой времени.
 // Каждое упражнение проверяется сразу; когда все получили итог, время останавливается
@@ -243,7 +249,7 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
 
       <JourneyExerciseContext.Provider value={api}>
         {checkpoint.exercises.map(({ exercise }) =>
-          restored.has(exercise.id) ? (
+          restored.has(exercise.id) || isUnanswered(progress.outcomes[exercise.id]) ? (
             <AnswerRecord
               key={exercise.id}
               exercise={exercise}
@@ -300,6 +306,13 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
   );
 }
 
+// Время вышло, а ответа не было: карточка упражнения сменяется компактной записью
+// («Время вышло — ответа нет» и объяснение), как после перезагрузки страницы, —
+// иначе оставались бы инструкции и пустые поля, с которыми уже ничего не сделать
+function isUnanswered(outcome: ExerciseOutcome | undefined): boolean {
+  return outcome !== undefined && outcome.skipped && outcome.answer === undefined;
+}
+
 // Калибровка: пары «уверенность — верно ли» из разбора, в порядке вопросов
 function calibrationMarks(result: CheckResult): CalibrationMark[] | undefined {
   const details = result.review?.details;
@@ -342,11 +355,13 @@ function CheckpointSummary({
     <section className="space-y-4 rounded-xl border border-accent bg-surface p-5">
       <h3 ref={headingRef} tabIndex={-1} className="flex items-center gap-2 text-lg font-semibold outline-none">
         <Flag size={20} aria-hidden="true" className="text-accent" />
-        Чекпоинт {index + 1} пройден · +{pointsText(points.total)}
+        Чекпоинт {index + 1} завершён · +{pointsText(points.total)}
       </h3>
+      {/* Сакура с фразой: на телефоне — в строку (фраза справа от дерева), чтобы под деревом
+          не оставался узкий столбик текста; от sm — колонкой слева от счёта */}
       <div className="flex flex-wrap items-start gap-4">
-        <div className="w-36 shrink-0 space-y-1 xl:hidden">
-          {sakura}
+        <div className="flex w-full items-center gap-3 sm:w-36 sm:shrink-0 sm:flex-col sm:items-stretch sm:gap-1 xl:hidden">
+          <div className="w-28 shrink-0 sm:w-full">{sakura}</div>
           <p className="text-xs leading-relaxed text-muted">{GROW_TEXT}</p>
         </div>
         <div className="min-w-60 flex-1 space-y-3 text-sm">
@@ -410,10 +425,12 @@ function PointsTable({ checkpoint, points }: { checkpoint: PublicCheckpoint; poi
       <tbody>
         {checkpoint.exercises.map(({ exercise }, n) => {
           const item = byId.get(exercise.id);
+          const type = typeLabel(exercise);
           return (
             <tr key={exercise.id}>
               <td className="py-0.5 pr-2">
                 Упражнение {n + 1}
+                {type && ` · ${type.name}`}
                 {item && <span className="text-muted">{factorsText(item)}</span>}
               </td>
               <td className="py-0.5 text-right">{item?.points ?? 0}</td>

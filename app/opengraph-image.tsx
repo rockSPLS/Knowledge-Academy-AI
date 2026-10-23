@@ -5,7 +5,7 @@ import { LogoMark } from "@/components/layout/LogoMark";
 // Тезисы не повторяем — их и так показывает описание под картинкой.
 // Next.js собирает картинку при сборке из этой разметки (PNG 1200×630).
 
-export const alt = "Prompt Engineering Academy — человек и ИИ разговаривают";
+export const alt = "Prompt Engineering Academy — человек и ИИ разговаривают, между ними облачко с маршрутом и флажком";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -27,7 +27,8 @@ export default function OpengraphImage() {
           background: "#ffffff",
         }}
       >
-        <LogoMark size={300} colors={LIGHT} />
+        {/* Знак широкий (3 : 1): 200 в высоту — 600 в ширину, половина обложки */}
+        <LogoMark size={200} colors={LIGHT} />
         {/* Встроенный шрифт генератора — только обычного начертания, поэтому без fontWeight */}
         <div style={{ fontSize: 64, color: "#18181b" }}>
           Prompt Engineering Academy

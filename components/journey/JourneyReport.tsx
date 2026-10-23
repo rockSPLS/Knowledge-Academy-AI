@@ -1,21 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AlarmClockCheck, CircleCheck, Flag, Printer, Target } from "lucide-react";
+import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from "react";
+import { AlarmClockCheck, CircleCheck, Download, ExternalLink, Flag, Target } from "lucide-react";
 import { plural } from "@/lib/plural";
 import { formatTime } from "@/lib/journey/timing";
 import { AnswerRecord } from "./AnswerRecord";
-import { DiscardConfirm } from "./DiscardConfirm";
 import { computeGamification, isFullyCorrect, type Achievements } from "./gamification";
 import { pointsText } from "./JourneyCompanion";
+import { downloadReport, openReport } from "./reportExport";
 import { Sakura } from "./Sakura";
-import type { ExerciseOutcome, JourneyAction, JourneyProgress } from "./state";
+import type { ExerciseOutcome, JourneyProgress } from "./state";
 
-// Итоги путешествия — экран в конце и он же печатная версия (печать и PDF — средствами
-// браузера, стили печати в app/globals.css). Сверху карточка-итог: дата, очки, сакура
+// Итоги путешествия — экран в конце. Сверху карточка-итог: дата, очки, сакура
 // в цвету, оценка от сакуры и достижения; затем «Что повторить»; затем по каждому
 // чекпоинту — счёт, конспект и все ответы. Ничего не хранится отдельно: всё считается
 // из прогресса, как и очки (gamification.ts). Запросов к модели нет.
+// «Открыть отчёт» и «Скачать» дают то же содержимое самостоятельной страницей
+// (reportExport.tsx): её можно напечатать, сохранить в PDF или открыть без сайта.
+// Печать самого экрана (Ctrl+P) тоже работает: на печати без кнопок и всегда светлая
+// (классы print: в компонентах, тёмная тема в app/globals.css — только для экрана).
 
 const PRIMARY_BUTTON =
   "inline-flex items-center gap-2 rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-accent-fill-foreground transition-colors hover:bg-accent-fill-hover";
@@ -44,13 +47,48 @@ function averageScore(outcomes: ExerciseOutcome[]): number | null {
 
 const answerAnchor = (exerciseId: string) => `answer-${exerciseId}`;
 
-export function JourneyReport({ progress, dispatch }: { progress: JourneyProgress; dispatch: (action: JourneyAction) => void }) {
+export function JourneyReport({ progress }: { progress: JourneyProgress }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     headingRef.current?.focus();
   }, []);
+
+  return (
+    <ReportContent
+      progress={progress}
+      headingRef={headingRef}
+      actions={
+        <div className="flex flex-wrap gap-3 print:hidden">
+          <button type="button" onClick={() => openReport(progress)} className={PRIMARY_BUTTON}>
+            <ExternalLink size={16} aria-hidden="true" />
+            Открыть отчёт
+            <span className="sr-only"> (в новой вкладке)</span>
+          </button>
+          <button type="button" onClick={() => downloadReport(progress)} className={SECONDARY_BUTTON}>
+            <Download size={16} aria-hidden="true" />
+            Скачать
+          </button>
+        </div>
+      }
+    />
+  );
+}
+
+// Содержимое итогов — одно для экрана на сайте и для самостоятельной страницы отчёта
+// (reportExport.tsx). actions — кнопки под карточкой-итогом (только на сайте);
+// standalone — страница отчёта: конспекты раскрыты, свёртывать их там незачем
+export function ReportContent({
+  progress,
+  headingRef,
+  actions,
+  standalone = false,
+}: {
+  progress: JourneyProgress;
+  headingRef?: RefObject<HTMLHeadingElement | null>;
+  actions?: ReactNode;
+  standalone?: boolean;
+}) {
   const game = useMemo(() => computeGamification(progress), [progress]);
-  const [isConfirming, setConfirming] = useState(false);
   const { journey } = progress;
 
   // По чекпоинтам: итоги упражнений, номера упражнений с ошибкой и средний балл
@@ -87,7 +125,9 @@ export function JourneyReport({ progress, dispatch }: { progress: JourneyProgres
           {date && <p className="mt-1 text-sm text-muted">{date}</p>}
         </div>
         <div className="flex flex-wrap items-start gap-6">
-          <Sakura leaves={game.leaves} started={game.startedCheckpoints} bloom className="w-40 shrink-0" />
+          {/* mx-auto: на телефоне, когда счёт уходит под дерево, сакура стоит по центру,
+              а рядом со счётом свободного места нет — счёт растягивается (flex-1) */}
+          <Sakura leaves={game.leaves} started={game.startedCheckpoints} bloom className="mx-auto w-40 shrink-0" />
           <div className="min-w-60 flex-1 space-y-3">
             <div>
               <p className="text-2xl font-semibold tabular-nums">{pointsText(game.total)}</p>
@@ -101,23 +141,7 @@ export function JourneyReport({ progress, dispatch }: { progress: JourneyProgres
         </div>
       </section>
 
-      {/* «Печать / PDF» видна и во время подтверждения: оно советует сначала сохранить итоги */}
-      <div className="space-y-3 print:hidden">
-        <div className="flex flex-wrap gap-3">
-          <button type="button" onClick={() => window.print()} className={PRIMARY_BUTTON}>
-            <Printer size={16} aria-hidden="true" />
-            Печать / PDF
-          </button>
-          {!isConfirming && (
-            <button type="button" onClick={() => setConfirming(true)} className={SECONDARY_BUTTON}>
-              Новое путешествие
-            </button>
-          )}
-        </div>
-        {isConfirming && (
-          <DiscardConfirm finished onConfirm={() => dispatch({ type: "discard" })} onCancel={() => setConfirming(false)} />
-        )}
-      </div>
+      {actions}
 
       {/* Оценённых ответов нет вовсе (на деле не бывает: в путешествии есть упражнения без ИИ) —
           тогда ни похвалы, ни «Что повторить» */}
@@ -176,12 +200,15 @@ export function JourneyReport({ progress, dispatch }: { progress: JourneyProgres
                   {pointsText(game.checkpoints[index]?.total ?? 0)}
                 </p>
               </div>
-              {/* На экране конспект свёрнут, на печати — раскрыт (свёрнутый блок печатается свёрнутым) */}
-              <details className="rounded-lg bg-surface p-3 text-sm print:hidden">
-                <summary className="cursor-pointer font-medium">Конспект</summary>
-                <p className="mt-2 leading-relaxed">{checkpoint.summary}</p>
-              </details>
-              <div className="hidden text-sm print:block">
+              {/* На экране конспект свёрнут, на печати и на странице отчёта — раскрыт
+                  (свёрнутый блок печатается свёрнутым) */}
+              {!standalone && (
+                <details className="rounded-lg bg-surface p-3 text-sm print:hidden">
+                  <summary className="cursor-pointer font-medium">Конспект</summary>
+                  <p className="mt-2 leading-relaxed">{checkpoint.summary}</p>
+                </details>
+              )}
+              <div className={standalone ? "text-sm" : "hidden text-sm print:block"}>
                 <p className="font-medium">Конспект</p>
                 <p className="mt-1 leading-relaxed">{checkpoint.summary}</p>
               </div>

@@ -6,6 +6,7 @@ import { plural } from "@/lib/plural";
 import { checkpointSeconds, formatTime } from "@/lib/journey/timing";
 import type { PublicJourney } from "@/lib/journey/types";
 import { DiscardConfirm } from "./DiscardConfirm";
+import { downloadReport } from "./reportExport";
 import { JourneyCheckpoint } from "./JourneyCheckpoint";
 import { GROW_TEXT } from "./JourneyCompanion";
 import { JourneyForm } from "./JourneyForm";
@@ -64,7 +65,12 @@ export function JourneyApp() {
   const { stage } = state;
   return (
     <div className="space-y-6">
-      <JourneyHeader journey={state.journey} finished={stage.kind === "finished"} dispatch={dispatch} />
+      <JourneyHeader
+        journey={state.journey}
+        finished={stage.kind === "finished"}
+        onDownload={stage.kind === "finished" ? () => downloadReport(state) : undefined}
+        dispatch={dispatch}
+      />
       {stage.kind === "start" && <JourneyStart progress={state} dispatch={dispatch} />}
       {stage.kind === "study" && <JourneyStudy journey={state.journey} dispatch={dispatch} />}
       {stage.kind === "checkpoint" && (
@@ -75,7 +81,7 @@ export function JourneyApp() {
           dispatch={dispatch}
         />
       )}
-      {stage.kind === "finished" && <JourneyReport progress={state} dispatch={dispatch} />}
+      {stage.kind === "finished" && <JourneyReport progress={state} />}
     </div>
   );
 }
@@ -85,34 +91,41 @@ export function JourneyApp() {
 function JourneyHeader({
   journey,
   finished,
+  onDownload,
   dispatch,
 }: {
   journey: PublicJourney;
   finished: boolean;
+  onDownload?: () => void;
   dispatch: (action: JourneyAction) => void;
 }) {
   const [isConfirming, setConfirming] = useState(false);
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <div>
+      {/* Кнопка — в строке с подписью, а не с названием: длинное название на телефоне
+          переносило её на отдельную строку, и до первого вопроса было дальше */}
+      <div>
+        {/* Без переноса кнопки: на самых узких экранах переносится подпись, а не кнопка.
+            min-h — высота кнопки: пока идёт подтверждение, кнопки нет, а строка не сжимается */}
+        <div className="flex min-h-[34px] items-center justify-between gap-3">
           <p className="text-sm text-muted">Путешествие по знаниям</p>
-          <h1 className="text-3xl font-semibold">{journey.title}</h1>
+          {!isConfirming && (
+            <button
+              type="button"
+              onClick={() => setConfirming(true)}
+              className="shrink-0 rounded-md border border-border-strong bg-background px-3 py-1.5 text-sm font-medium hover:bg-border print:hidden"
+            >
+              Новое путешествие
+            </button>
+          )}
         </div>
-        {!isConfirming && (
-          <button
-            type="button"
-            onClick={() => setConfirming(true)}
-            className="mt-1 rounded-md border border-border-strong bg-background px-3 py-1.5 text-sm font-medium hover:bg-border print:hidden"
-          >
-            Новое путешествие
-          </button>
-        )}
+        <h1 className="text-3xl font-semibold">{journey.title}</h1>
       </div>
       {isConfirming && (
         <DiscardConfirm
           finished={finished}
+          onDownload={onDownload}
           onConfirm={() => dispatch({ type: "discard" })}
           onCancel={() => setConfirming(false)}
         />

@@ -34,12 +34,13 @@ import type { ExerciseOutcome } from "./state";
 
 // Компактная запись упражнения с итогом: вопрос, итог, ответ человека, разбор и объяснение.
 // Только для чтения — одна и та же запись в чекпоинте после перезагрузки страницы
-// и в итогах путешествия (в том числе на печати). Ответ и разбор берутся из прогресса
+// (и сразу, если время вышло, а ответа не было) и в итогах путешествия (в том числе на печати). Ответ и разбор берутся из прогресса
 // (state.ts); в прогрессе, сохранённом до появления ответов, их нет — тогда только итог
 // и объяснение, как раньше.
 
-// Название и значок типа — те же, что в карточках упражнений (components/exercises/types/)
-function typeLabel(exercise: PublicExercise): { name: string; Icon: LucideIcon } | undefined {
+// Название и значок типа — те же, что в карточках упражнений (components/exercises/types/).
+// Название нужно и в разборе очков чекпоинта (JourneyCheckpoint.tsx)
+export function typeLabel(exercise: PublicExercise): { name: string; Icon: LucideIcon } | undefined {
   switch (exercise.type) {
     case "multiple-choice":
       return { name: "Выбор ответа", Icon: ListChecks };
