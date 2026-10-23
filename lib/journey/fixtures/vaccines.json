@@ -1,5 +1,5 @@
 {
-  "description": "Сохранённые ответы модели: генерация по теме «Как работают прививки». Все шаги приняты с первой попытки. «Калибровка уверенности» — во втором чекпоинте. Все упражнения — настоящие ответы модели.",
+  "description": "Сохранённые ответы модели: генерация по теме «Как работают прививки». Все шаги приняты с первой попытки. «Калибровка уверенности» — во втором чекпоинте. Все упражнения — настоящие ответы модели. План переведён в новый формат преобразованием: отметки подходящих типов — те типы, что модель выбрала тогда. Запасных упражнений нет: ответы записаны до того, как они появились.",
   "source": "Как работают прививки",
   "plan": [
     {
@@ -25,11 +25,11 @@
             "Антиген и антитело — это одно и то же."
           ],
           "dependsOn": [],
-          "exerciseTypes": [
+          "suitableTypes": [
             "multiple-choice",
             "fill-blank"
           ],
-          "freeAnswerKind": "none"
+          "freeAnswerKinds": []
         },
         {
           "title": "Иммунный ответ и антитела",
@@ -50,11 +50,10 @@
           "dependsOn": [
             1
           ],
-          "exerciseTypes": [
-            "calibration",
-            "free-answer"
-          ],
-          "freeAnswerKind": "simple"
+          "suitableTypes": [],
+          "freeAnswerKinds": [
+            "simple"
+          ]
         },
         {
           "title": "Что содержит вакцина",
@@ -76,11 +75,11 @@
             1,
             2
           ],
-          "exerciseTypes": [
+          "suitableTypes": [
             "multiple-choice",
             "match-pairs"
           ],
-          "freeAnswerKind": "none"
+          "freeAnswerKinds": []
         },
         {
           "title": "Иммунологическая память",
@@ -102,11 +101,12 @@
             2,
             3
           ],
-          "exerciseTypes": [
-            "true-false",
-            "free-answer"
+          "suitableTypes": [
+            "true-false"
           ],
-          "freeAnswerKind": "explain"
+          "freeAnswerKinds": [
+            "explain"
+          ]
         },
         {
           "title": "Коллективный иммунитет",
@@ -126,11 +126,11 @@
           "dependsOn": [
             4
           ],
-          "exerciseTypes": [
+          "suitableTypes": [
             "multiple-choice",
             "true-false"
           ],
-          "freeAnswerKind": "none"
+          "freeAnswerKinds": []
         }
       ]
     }

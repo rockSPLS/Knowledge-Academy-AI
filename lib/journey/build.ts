@@ -8,38 +8,25 @@ import {
   FREE_ANSWER_CRITERIA_MIN,
 } from "@/lib/exercises/limits";
 import { normalizeText } from "@/lib/exercises/text";
-import type { Exercise } from "@/lib/exercises/types";
-import type {
-  CheckpointExercises,
-  GeneratedExercise,
-  GeneratedType,
-  Plan,
-  PlanCheckpoint,
-} from "./schemas";
+import type { Exercise, FreeAnswerKind } from "@/lib/exercises/types";
+import { calibrationIndex, type CheckpointLayout } from "./layout";
+import type { CheckpointExercises, GeneratedExercise, GeneratedType, Plan, PlanCheckpoint } from "./schemas";
 import type { Checkpoint, Difficulty, JourneyExercise, SourceDoubt } from "./types";
 
 // Проверка ответов модели и сборка из них путешествия. Модель пишет только
 // содержание; id, порядок показа и перемешивание задаёт этот модуль — так id
-// не подсказывают ответ, а верный вариант не стоит всегда первым.
+// не подсказывают ответ, а верный вариант не стоит всегда первым. Какие типы
+// упражнений в каком чекпоинте, решает раскладка (layout.ts).
 // Ошибки — короткий текст по-русски: он пишется в лог и уходит модели при повторе.
 
 export const CHECKPOINTS_MIN = 3;
 export const CHECKPOINTS_MAX = 5;
-const EXERCISES_MIN = 2;
-const EXERCISES_MAX = 3;
 const DOUBTS_MAX = 3;
-// Разных типов упражнений во всём путешествии — не меньше
-const JOURNEY_TYPES_MIN = 3;
-// Свободных ответов во всём путешествии — не больше: каждый занимает 2–3 минуты
-// и одну-две оценки моделью (под это рассчитан лимит оценки в lib/llm/limits.ts)
-export const FREE_ANSWERS_MAX = 2;
 // Потолок длины любой строки в ответе модели: защита от «простыней» и зацикливания
 const MAX_TEXT_LENGTH = 1500;
 // Допустимый ответ в пропуске не длиннее того, что можно ввести в поле
 // (схема ответа «Заполните пропуски» — до 60 символов)
 const MAX_BLANK_ANSWER_LENGTH = 60;
-// Калибровка — не дальше этого чекпоинта (с 1)
-const CALIBRATION_LAST_CHECKPOINT = 2;
 // Калибровка: правильный ответ — слово или фраза, не объяснение
 const MAX_CALIBRATION_EXPECTED_LENGTH = 120;
 // Задание калибровки одно и то же во всех путешествиях — его задаёт сервер, а не модель
@@ -49,7 +36,8 @@ export type BuildResult<T> = { ok: true; value: T } | { ok: false; error: string
 
 // ---------- План ----------
 
-// Проверяет план подходящего материала (suitable = true)
+// Проверяет план подходящего материала (suitable = true). Типы упражнений план
+// не выбирает — их раскладывает сервер (layout.ts), поэтому правил для типов здесь нет
 export function checkPlan(plan: Plan): string | null {
   const tooLong = findTooLongText(plan);
   if (tooLong) return tooLong;
@@ -62,32 +50,9 @@ export function checkPlan(plan: Plan): string | null {
     const error = checkPlanCheckpoint(checkpoint, index + 1);
     if (error) return `чекпоинт ${index + 1}: ${error}`;
   }
-  const types = new Set(plan.checkpoints.flatMap((checkpoint) => checkpoint.exerciseTypes));
-  if (types.size < JOURNEY_TYPES_MIN) {
-    return `во всём путешествии должно быть не меньше ${JOURNEY_TYPES_MIN} разных типов упражнений`;
-  }
-  const freeAnswers = plan.checkpoints.filter((checkpoint) =>
-    checkpoint.exerciseTypes.includes("free-answer"),
-  ).length;
-  if (freeAnswers > FREE_ANSWERS_MAX) {
-    return `free-answer — не больше чем в ${FREE_ANSWERS_MAX} чекпоинтах путешествия`;
-  }
-  // Свободные ответы одного путешествия — разных видов
-  const kinds = plan.checkpoints
-    .map((checkpoint) => checkpoint.freeAnswerKind)
-    .filter((kind) => kind !== "none");
-  if (new Set(kinds).size !== kinds.length) {
-    return "у свободных ответов в путешествии должны быть разные виды (freeAnswerKind)";
-  }
-  // Калибровка — собственный тип путешествий: ровно одна в каждом. Её вывод
-  // «когда вы уверены, вы правы в N из M» и связанные с ней очки есть в любом путешествии.
-  // Не дальше второго чекпоинта: до неё доходит и тот, кто проходит путешествие не до конца
-  const calibrations = plan.checkpoints.flatMap((checkpoint, index) =>
-    checkpoint.exerciseTypes.includes("calibration") ? [index + 1] : [],
-  );
-  if (calibrations.length !== 1) return "calibration — ровно в одном чекпоинте путешествия";
-  if (calibrations[0] > CALIBRATION_LAST_CHECKPOINT) {
-    return `calibration — во втором чекпоинте (или в первом), а не в ${calibrations[0]}-м`;
+  // Калибровка — в первом или втором чекпоинте, и её вопросы строятся на заблуждениях
+  if (calibrationIndex(plan.checkpoints) === null) {
+    return "в misconceptions первого или второго чекпоинта нужно хотя бы одно заблуждение";
   }
   return null;
 }
@@ -96,32 +61,13 @@ function checkPlanCheckpoint(checkpoint: PlanCheckpoint, number: number): string
   if ([checkpoint.title, checkpoint.concept, checkpoint.summary].some(isBlank)) {
     return "пустое название, понятие или конспект";
   }
-  if (checkpoint.keyFacts.length < 2 || checkpoint.keyFacts.some(isBlank)) {
+  // Схема требует не меньше двух фактов; здесь — ещё и непустых
+  if (checkpoint.keyFacts.filter((fact) => !isBlank(fact)).length < 2) {
     return "нужно не меньше двух ключевых фактов";
   }
   const deps = checkpoint.dependsOn;
   if (!deps.every((dep) => Number.isInteger(dep) && dep >= 1 && dep < number)) {
     return "зависимости — только номера более ранних чекпоинтов";
-  }
-  const types = checkpoint.exerciseTypes;
-  if (types.length < EXERCISES_MIN || types.length > EXERCISES_MAX) {
-    return `нужно ${EXERCISES_MIN}–${EXERCISES_MAX} типа упражнений`;
-  }
-  if (new Set(types).size !== types.length) return "типы упражнений в чекпоинте повторяются";
-  // Обе проверяют, верно ли утверждение или ответ, — в одном чекпоинте это повтор
-  if (types.includes("calibration") && types.includes("true-false")) {
-    return "calibration и true-false не ставятся в один чекпоинт";
-  }
-  // Вопросы калибровки строятся на заблуждениях — без них уверенно ошибиться не на чем
-  if (types.includes("calibration") && !checkpoint.misconceptions.some((item) => !isBlank(item))) {
-    return "calibration — только в чекпоинте, где в misconceptions есть заблуждение";
-  }
-  if (types.includes("free-answer") === (checkpoint.freeAnswerKind === "none")) {
-    return "freeAnswerKind — вид свободного ответа, если в exerciseTypes есть free-answer, иначе none";
-  }
-  // «Объясните другу» строится на заблуждении из карточки — без него модели не на что опереться
-  if (checkpoint.freeAnswerKind === "friend" && !checkpoint.misconceptions.some((item) => !isBlank(item))) {
-    return "freeAnswerKind friend — только если в misconceptions есть заблуждение";
   }
   return null;
 }
@@ -140,34 +86,69 @@ export function checkpointId(number: number): string {
   return `c${number}`;
 }
 
-// Собирает чекпоинт из плана и упражнений, написанных моделью
+// Собранный чекпоинт; replaced — что заменено запасным упражнением (для лога), иначе null
+export type BuiltCheckpoint = { checkpoint: Checkpoint; replaced: string | null };
+
+// Собирает чекпоинт из плана, раскладки и упражнений, написанных моделью.
+// Основное упражнение — первое в списке модели упражнение каждого типа раскладки,
+// запасное — следующее упражнение запасного типа; остальное не используется.
+// Если одно основное упражнение не прошло проверку (или его нет), на его место
+// встаёт запасное — без повторного запроса. Калибровку запасное не заменяет:
+// она в путешествии ровно одна. Две ошибки или негодное запасное — ошибка чекпоинта
 export function buildCheckpoint(
   planned: PlanCheckpoint,
+  layout: CheckpointLayout,
   number: number,
   generated: CheckpointExercises,
-): BuildResult<Checkpoint> {
-  const tooLong = findTooLongText(generated);
-  if (tooLong) return { ok: false, error: tooLong };
-  const list = generated.exercises;
-  const plannedTypes = new Set<GeneratedType>(planned.exerciseTypes);
-  if (
-    list.length !== plannedTypes.size ||
-    new Set(list.map((item) => item.type)).size !== list.length ||
-    !list.every((item) => plannedTypes.has(item.type))
-  ) {
-    return {
-      ok: false,
-      error: `нужно ровно по одному упражнению типов: ${[...plannedTypes].join(", ")}`,
-    };
+): BuildResult<BuiltCheckpoint> {
+  // Основные — по типам раскладки, с позицией в списке модели: она задаёт порядок
+  // при равной сложности
+  const mains = new Map<GeneratedType, { item: GeneratedExercise; position: number }>();
+  let spare: { item: GeneratedExercise; position: number } | null = null;
+  for (const [position, item] of generated.exercises.entries()) {
+    if (layout.types.includes(item.type) && !mains.has(item.type)) {
+      mains.set(item.type, { item, position });
+    } else if (item.type === layout.spare && spare === null) {
+      spare = { item, position };
+    }
+  }
+
+  // Слот — место основного упражнения: собранное упражнение или текст ошибки
+  type Slot = { type: GeneratedType; position: number; value: JourneyExercise | null; error: string };
+  const slots = layout.types.map((type): Slot => {
+    const main = mains.get(type);
+    const built = main ? buildExercise(main.item, layout.freeAnswerKind) : fail<JourneyExercise>("упражнения этого типа нет");
+    return built.ok
+      ? { type, position: main?.position ?? Infinity, value: built.value, error: "" }
+      : { type, position: main?.position ?? Infinity, value: null, error: built.error };
+  });
+
+  let replaced: string | null = null;
+  const failed = slots.filter((slot) => slot.value === null);
+  if (failed.length > 0) {
+    const slot = failed[0];
+    const error = `упражнение ${slot.type}: ${slot.error}`;
+    // Запасной тип другой — заменяет любое основное, кроме калибровки; тот же — только своё
+    const canReplace =
+      failed.length === 1 &&
+      slot.type !== "calibration" &&
+      layout.spare !== null &&
+      (layout.spare === slot.type || !layout.types.includes(layout.spare));
+    if (!canReplace || spare === null) return { ok: false, error };
+    const built = buildExercise(spare.item, layout.freeAnswerKind);
+    if (!built.ok) return { ok: false, error: `${error}; запасное ${layout.spare}: ${built.error}` };
+    slot.value = built.value;
+    // Отсутствующее основное — на месте запасного в списке модели
+    if (slot.position === Infinity) slot.position = spare.position;
+    replaced = `${error} — заменено запасным ${layout.spare}`;
   }
 
   const id = checkpointId(number);
-  const exercises: JourneyExercise[] = [];
-  for (const [index, item] of list.entries()) {
-    const built = buildExercise(item, `${id}-${index + 1}`, planned);
-    if (!built.ok) return { ok: false, error: `упражнение ${index + 1} (${item.type}): ${built.error}` };
-    exercises.push(built.value);
-  }
+  // id — по порядку в списке модели (не по показу), как и раньше
+  const exercises = slots
+    .sort((a, b) => a.position - b.position)
+    .flatMap((slot) => (slot.value ? [slot.value] : []))
+    .map((value, index) => ({ ...value, exercise: { ...value.exercise, id: `${id}-${index + 1}` } }));
   // Внутри чекпоинта упражнения идут по возрастанию сложности. Порядок модели
   // при равной сложности сохраняется (сортировка устойчивая)
   exercises.sort((a, b) => a.difficulty - b.difficulty);
@@ -175,28 +156,34 @@ export function buildCheckpoint(
   return {
     ok: true,
     value: {
-      id,
-      title: planned.title.trim(),
-      concept: planned.concept.trim(),
-      summary: planned.summary.trim(),
-      dependsOn: [...new Set(planned.dependsOn)].map(checkpointId),
-      exercises,
+      checkpoint: {
+        id,
+        title: planned.title.trim(),
+        concept: planned.concept.trim(),
+        summary: planned.summary.trim(),
+        dependsOn: [...new Set(planned.dependsOn)].map(checkpointId),
+        exercises,
+      },
+      replaced,
     },
   };
 }
 
 // ---------- Упражнение ----------
 
+// id упражнению назначает buildCheckpoint, когда известен состав чекпоинта;
+// freeAnswerKind — вид свободного ответа из раскладки
 function buildExercise(
   item: GeneratedExercise,
-  id: string,
-  planned: PlanCheckpoint,
+  freeAnswerKind: FreeAnswerKind | null,
 ): BuildResult<JourneyExercise> {
+  const tooLong = findTooLongText(item);
+  if (tooLong) return { ok: false, error: tooLong };
   if (![1, 2, 3].includes(item.difficulty)) return { ok: false, error: "сложность — 1, 2 или 3" };
   if ([item.hint, item.question, item.explanation].some(isBlank)) {
     return { ok: false, error: "пустая подсказка, вопрос или объяснение" };
   }
-  const built = buildExerciseBody(item, id, planned);
+  const built = buildExerciseBody(item, "", freeAnswerKind);
   if (!built.ok) return built;
   // Та же проверка целостности, что у упражнений банка
   const error = validateExercise(built.value);
@@ -214,7 +201,7 @@ function buildExercise(
 function buildExerciseBody(
   item: GeneratedExercise,
   id: string,
-  planned: PlanCheckpoint,
+  freeAnswerKind: FreeAnswerKind | null,
 ): BuildResult<Exercise> {
   const question = item.question.trim();
   const explanation = item.explanation.trim();
@@ -351,10 +338,10 @@ function buildExerciseBody(
         return fail("критерии пустые или повторяются");
       }
       if (isBlank(item.sample)) return fail("нужен образец ответа");
-      // Вид задания — из плана. checkPlan уже проверил, что он задан, — ветка ниже
-      // только защита (и сужение типа), модели шага 2 эта ошибка не адресована
-      const kind = planned.freeAnswerKind;
-      if (kind === "none") return fail("в плане не задан вид свободного ответа");
+      // Вид задания — из раскладки. Свободный ответ стоит в раскладке только вместе
+      // с видом — ветка ниже лишь защита (и сужение типа)
+      const kind = freeAnswerKind;
+      if (kind === null) return fail("в раскладке нет вида свободного ответа");
       return ok({
         id,
         type: "free-answer",
@@ -400,7 +387,7 @@ function ok(exercise: Exercise): BuildResult<Exercise> {
   return { ok: true, value: exercise };
 }
 
-function fail(error: string): BuildResult<Exercise> {
+function fail<T = Exercise>(error: string): BuildResult<T> {
   return { ok: false, error };
 }
 

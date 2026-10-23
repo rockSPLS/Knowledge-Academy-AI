@@ -17,6 +17,7 @@ import { askModel, generateJourney, type AskModel } from "@/lib/journey/generate
 import { askJudge, judgeAnswer, judgeCalibration } from "@/lib/journey/judge";
 import { toPublicJourney } from "@/lib/journey/public";
 import { sealJourney, unsealJourney } from "@/lib/journey/seal";
+import { runJourneySelfCheck } from "@/lib/journey/selfCheck";
 import { MAX_SOURCE_LENGTH } from "@/lib/llm/limits";
 import { consumeEvaluationRequest, consumeModelRequest } from "@/lib/llm/rateLimit";
 import { readJsonBody } from "@/lib/llm/request";
@@ -33,7 +34,9 @@ import { modelFailureResponse, rateLimitedResponse } from "@/lib/llm/responses";
 //   (проверка отдельных случаев: ошибка в ответе, повтор, отказ);
 // - { source, record: true } — настоящая генерация; ответы модели возвращаются
 //   в поле recording в формате сохранённых ответов (lib/journey/fixtures/);
-// - { unseal: "v1...." } — расшифровка зашифрованного путешествия (null — подделано или повреждено).
+// - { unseal: "v1...." } — расшифровка зашифрованного путешествия (null — подделано или повреждено);
+// - { selfCheck: true } — самопроверка раскладки, сохранённых примеров и запасных упражнений
+//   без запросов к модели (lib/journey/selfCheck.ts): { passed, failures }.
 // Возвращает то же, что POST /api/journey, и для проверки — полное путешествие (full)
 // и результат расшифровки (roundTrip). Без JOURNEY_SECRET sealed = null.
 
@@ -51,6 +54,7 @@ const requestSchema = z.union([
   z.object({ responses: fixtureSchema }),
   z.object({ source: z.string().trim().min(1).max(MAX_SOURCE_LENGTH), record: z.literal(true) }),
   z.object({ unseal: z.string() }),
+  z.object({ selfCheck: z.literal(true) }),
   z.object({
     judge: z.object({
       fixture: z.string(),
@@ -84,6 +88,7 @@ export async function POST(request: Request) {
   if ("unseal" in parsed.data) {
     return Response.json({ journey: unsealJourney(parsed.data.unseal) });
   }
+  if ("selfCheck" in parsed.data) return Response.json(await runJourneySelfCheck());
   if ("judge" in parsed.data) return judgeWithModel(request, parsed.data.judge);
 
   let source: string;

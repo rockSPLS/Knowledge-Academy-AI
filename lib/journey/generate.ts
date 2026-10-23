@@ -2,14 +2,17 @@ import "server-only";
 import type { z } from "zod";
 import { generateStructured, type ModelFailure, type ModelResult } from "@/lib/llm/client";
 import { buildCheckpoint, buildDoubts, checkPlan } from "./build";
+import { layoutJourney } from "./layout";
 import { EXERCISES_SYSTEM, PLAN_SYSTEM, exercisesPrompt, planPrompt, retryNote } from "./prompts";
 import { checkpointExercisesSchema, planSchema } from "./schemas";
 import type { Journey } from "./types";
 
 // Генерация путешествия: план (шаг 1), затем упражнения всех чекпоинтов
-// параллельно (шаг 2). Каждый ответ модели проверяется схемой и правилами
+// параллельно (шаг 2). Между шагами сервер раскладывает типы упражнений
+// по чекпоинтам (layout.ts). Каждый ответ модели проверяется схемой и правилами
 // build.ts; если не прошёл — шаг повторяется один раз с объяснением, что не так.
 // Повторяется только неудачный шаг: сбой одного чекпоинта не переделывает остальные.
+// Одно негодное упражнение чекпоинта повтора не требует: его заменяет запасное.
 
 // Тайм-ауты одной попытки: на план — больше, в нём весь текст пользователя.
 // С повтором худший случай — около 4,5 минуты (maxDuration маршрута — 300 с)
@@ -118,6 +121,9 @@ export async function generateJourney(
     };
   }
 
+  // Типы упражнений по чекпоинтам раскладывает сервер по отметкам плана
+  const layouts = layoutJourney(plan.value.checkpoints);
+
   // Причина первого окончательного сбоя: остальные чекпоинты после него
   // отменяются и «падают» уже из-за отмены
   let failure: ModelFailure | null = null;
@@ -129,12 +135,17 @@ export async function generateJourney(
         {
           schema: checkpointExercisesSchema,
           system: EXERCISES_SYSTEM,
-          prompt: exercisesPrompt(plan.value, planned, index + 1),
+          prompt: exercisesPrompt(plan.value, planned, layouts[index], index + 1),
           timeoutMs: EXERCISES_TIMEOUT_MS,
           maxOutputTokens: EXERCISES_MAX_OUTPUT_TOKENS,
           abortSignal,
         },
-        (value) => buildCheckpoint(planned, index + 1, value),
+        (value) => {
+          const built = buildCheckpoint(planned, layouts[index], index + 1, value);
+          if (!built.ok) return built;
+          if (built.value.replaced) console.warn(`[journey] чекпоинт ${index + 1}: ${built.value.replaced}`);
+          return { ok: true, value: built.value.checkpoint };
+        },
       );
       if (!step.ok && failure === null) {
         failure = step.reason;
