@@ -21,7 +21,7 @@ export type ExerciseOutcome = {
   score: number;
   verdict: Verdict;
   // С какой попытки (1 или 2; 0 — ответа не было): за вторую попытку в очках
-  // будет понижающий коэффициент
+  // понижающий коэффициент (см. gamification.ts)
   attempts: number;
   // Общее объяснение — для карточки после перезагрузки страницы
   explanation: string;
@@ -82,6 +82,8 @@ export type JourneyAction =
   // Время вышло, а ответа нет; unrated — свободный ответ пропущен без оценки
   | { type: "skipped"; exerciseId: string; explanation: string; unrated: boolean; now: number }
   | { type: "hint"; exerciseId: string; hint: string }
+  // Время чекпоинта стояло, пока ИИ оценивал ответ: момент окончания сдвигается на паузу
+  | { type: "extendDeadline"; checkpointId: string; ms: number }
   | { type: "finish" }
   | { type: "discard" };
 
@@ -147,6 +149,15 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
     }
     case "hint":
       return { ...state, hints: { ...state.hints, [action.exerciseId]: action.hint } };
+    case "extendDeadline": {
+      const run = state.runs[action.checkpointId];
+      // Чекпоинт уже закончен — остаток времени записан, сдвигать нечего
+      if (!run || run.timeLeftSec !== undefined || !(action.ms > 0)) return state;
+      return {
+        ...state,
+        runs: { ...state.runs, [action.checkpointId]: { ...run, deadline: run.deadline + action.ms } },
+      };
+    }
     case "finish":
       return { ...state, stage: { kind: "finished" } };
   }

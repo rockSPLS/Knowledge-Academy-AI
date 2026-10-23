@@ -39,6 +39,26 @@
   --danger: #b91c1c;
   --danger-soft: #fef2f2;
   --danger-border: #fca5a5;
+
+  /* Палитра компаньона — сакура-бонсай в путешествии (components/journey/Sakura.tsx).
+     Природные цвета; жёлтый лист — увядание после ошибки, а не итог «Частично» */
+  --plant-trunk: #6b3f12;
+  --plant-trunk-edge: #412402;
+  --plant-leaf: #639922;
+  --plant-leaf-edge: #3b6d11;
+  --plant-leaf-light: #97c459;
+  --plant-leaf-highlight: #c0dd97;
+  --plant-wilt: #ef9f27;
+  --plant-wilt-edge: #ba7517;
+  --plant-wilt-light: #fac775;
+  --plant-pot: #534ab7;
+  --plant-pot-edge: #3c3489;
+  --plant-pot-light: #7f77dd;
+  --plant-stone: #888780;
+  --plant-stone-edge: #5f5e5a;
+  --plant-petal: #f4c0d1;
+  --plant-petal-edge: #d4537e;
+  --plant-core: #fac775;
 }
 
 [data-theme="dark"] {
@@ -73,6 +93,12 @@
   --danger: #f87171;
   --danger-soft: #2d0a0a;
   --danger-border: #991b1b;
+
+  /* Ствол и горшок светлее, чтобы не терялись на тёмном фоне */
+  --plant-trunk: #9a6a2e;
+  --plant-pot: #6159ee;
+  --plant-pot-edge: #4f46e5;
+  --plant-pot-light: #a5b4fc;
 }
 
 @theme inline {
@@ -101,6 +127,39 @@
   --color-danger-border: var(--danger-border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-plant-trunk: var(--plant-trunk);
+  --color-plant-trunk-edge: var(--plant-trunk-edge);
+  --color-plant-leaf: var(--plant-leaf);
+  --color-plant-leaf-edge: var(--plant-leaf-edge);
+  --color-plant-leaf-light: var(--plant-leaf-light);
+  --color-plant-leaf-highlight: var(--plant-leaf-highlight);
+  --color-plant-wilt: var(--plant-wilt);
+  --color-plant-wilt-edge: var(--plant-wilt-edge);
+  --color-plant-wilt-light: var(--plant-wilt-light);
+  --color-plant-pot: var(--plant-pot);
+  --color-plant-pot-edge: var(--plant-pot-edge);
+  --color-plant-pot-light: var(--plant-pot-light);
+  --color-plant-stone: var(--plant-stone);
+  --color-plant-stone-edge: var(--plant-stone-edge);
+  --color-plant-petal: var(--plant-petal);
+  --color-plant-petal-edge: var(--plant-petal-edge);
+  --color-plant-core: var(--plant-core);
+}
+
+/* Цветы сакуры распускаются в конце путешествия (класс motion-safe:animate-bloom) */
+@theme {
+  --animate-bloom: bloom 700ms ease-out both;
+
+  @keyframes bloom {
+    from {
+      opacity: 0;
+      transform: scale(0.4);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
 }
 
 body {

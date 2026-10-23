@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, Clock, Flag, TriangleAlert } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowRight, CircleCheck, Clock, Flag, TriangleAlert } from "lucide-react";
 import { ExerciseView } from "@/components/exercises/ExerciseView";
 import { VERDICTS } from "@/components/exercises/ExerciseShell";
 import { plural } from "@/lib/plural";
@@ -10,7 +10,19 @@ import type { CheckResult } from "@/lib/exercises/types";
 import type { PublicCheckpoint } from "@/lib/journey/types";
 import { checkJourneyAnswer, fetchHint, fetchSkipExplanation } from "./api";
 import { CheckpointTimer } from "./CheckpointTimer";
+import {
+  computeGamification,
+  factorText,
+  isFullyCorrect,
+  HINT_FACTOR,
+  SECOND_ATTEMPT_FACTOR,
+  STREAK_FACTOR,
+  type CheckpointPoints,
+  type ExercisePoints,
+} from "./gamification";
+import { CompanionAside, GROW_TEXT, MiniSakura, pointsText, ScoreLine } from "./JourneyCompanion";
 import { skippedLabel } from "./outcomeLabels";
+import { Sakura } from "./Sakura";
 import { JourneyExerciseContext, type JourneyExerciseApi } from "./JourneyExerciseContext";
 import {
   isCheckpointDone,
@@ -22,8 +34,10 @@ import {
 
 // Чекпоинт путешествия: все его упражнения сразу под липкой полосой времени.
 // Каждое упражнение проверяется сразу; когда все получили итог, время останавливается
-// и внизу появляется итог чекпоинта с переходом к следующему. Когда время вышло,
-// ответы отправляются как есть (см. finalizer в useExercise).
+// и внизу появляется итог чекпоинта с очками и переходом к следующему. Когда время вышло,
+// ответы отправляются как есть (см. finalizer в useExercise). Пока ИИ оценивает
+// свободный ответ или калибровку, время стоит: момент окончания сдвигается на паузу.
+// Рядом — сакура и счёт (JourneyCompanion.tsx).
 
 type JourneyCheckpointProps = {
   progress: JourneyProgress;
@@ -43,11 +57,16 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
   // перезагрузка страницы не даёт лишнего времени. Секунды на экране обновляет
   // сам CheckpointTimer — упражнения не перерисовываются каждую секунду
   const [isTimeUp, setTimeUp] = useState(() => Date.now() >= deadline);
+  // Пауза, пока ИИ оценивает ответ: момент её начала (null — паузы нет). Оценок может
+  // идти несколько сразу — пауза длится, пока не закончится последняя.
+  // В localStorage пауза не хранится: перезагрузка обрывает оценку, и время идёт как обычно
+  const [pausedAt, setPausedAt] = useState<number | null>(null);
+  const pause = useRef({ count: 0, since: 0 });
   useEffect(() => {
-    if (isTimeUp || isDone) return;
+    if (isTimeUp || isDone || pausedAt !== null) return;
     const timer = setTimeout(() => setTimeUp(true), Math.max(0, deadline - Date.now()));
     return () => clearTimeout(timer);
-  }, [isTimeUp, isDone, deadline]);
+  }, [isTimeUp, isDone, deadline, pausedAt]);
 
   // Упражнения, у которых итог был ещё до открытия страницы (страницу перезагрузили):
   // их ответ не сохраняется, поэтому показываем итог и объяснение
@@ -106,13 +125,37 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
   }
 
   // Последние значения для эффектов и запросов. timeUpRef — чтобы readTimeUp()
-  // совпадал с isTimeUp, даже если таймер сработал чуть раньше часов
+  // совпадал с isTimeUp, даже если таймер сработал чуть раньше часов;
+  // deadlineRef сдвигается сразу в конце паузы, не дожидаясь перерисовки
   const isDoneRef = useRef(isDone);
   const timeUpRef = useRef(isTimeUp);
+  const deadlineRef = useRef(deadline);
   useEffect(() => {
     isDoneRef.current = isDone;
     timeUpRef.current = isTimeUp;
+    deadlineRef.current = deadline;
   });
+
+  // На паузе время не выходит
+  const readTimeUp = useCallback(
+    () => timeUpRef.current || (pause.current.count === 0 && Date.now() >= deadlineRef.current),
+    [],
+  );
+
+  const beginPause = useCallback(() => {
+    if (pause.current.count++ > 0) return;
+    pause.current.since = Date.now();
+    setPausedAt(pause.current.since);
+  }, []);
+
+  const endPause = useCallback(() => {
+    if (--pause.current.count > 0) return;
+    const ms = Date.now() - pause.current.since;
+    deadlineRef.current += ms;
+    setPausedAt(null);
+    // Сдвиг записывается раньше итога упражнения — остаток времени чекпоинта считается уже с ним
+    if (isMounted.current) dispatch({ type: "extendDeadline", checkpointId: checkpoint.id, ms });
+  }, [dispatch, checkpoint.id]);
 
   // Только в момент, когда время вышло (или страница открыта уже после этого)
   useEffect(() => {
@@ -133,14 +176,21 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
       attemptsUsed: (id) => progress.attempts[id]?.count ?? 0,
       check: async (id, answer, reveal) => {
         const type = findExercise(id)?.type;
-        // Калибровку тоже оценивает модель — с её тайм-аутом; запечатанной оценки у неё нет
-        if (type === "calibration") return checkJourneyAnswer(sealed, id, answer, reveal, {});
-        if (type !== "free-answer") return checkJourneyAnswer(sealed, id, answer, reveal);
-        const { evaluation, ...result } = await checkJourneyAnswer(sealed, id, answer, reveal, {
-          evaluation: evaluations.current.get(id),
-        });
-        if (evaluation) evaluations.current.set(id, evaluation);
-        return result;
+        if (type !== "calibration" && type !== "free-answer") return checkJourneyAnswer(sealed, id, answer, reveal);
+        // Ответ оценивает ИИ — время стоит (если оно ещё идёт)
+        const pauses = !readTimeUp() && !isDoneRef.current;
+        if (pauses) beginPause();
+        try {
+          // Калибровку тоже оценивает модель — с её тайм-аутом; запечатанной оценки у неё нет
+          if (type === "calibration") return await checkJourneyAnswer(sealed, id, answer, reveal, {});
+          const { evaluation, ...result } = await checkJourneyAnswer(sealed, id, answer, reveal, {
+            evaluation: evaluations.current.get(id),
+          });
+          if (evaluation) evaluations.current.set(id, evaluation);
+          return result;
+        } finally {
+          if (pauses) endPause();
+        }
       },
       recordCheck: (id, result, attempt) =>
         safeDispatch({
@@ -164,10 +214,12 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
         safeDispatch({ type: "hint", exerciseId: id, hint });
       },
       isTimeUp,
-      readTimeUp: () => timeUpRef.current || Date.now() >= deadline,
+      readTimeUp,
       registerFinalizer,
     };
-  }, [checkpoint, progress.attempts, progress.outcomes, progress.hints, sealed, dispatch, isTimeUp, deadline, registerFinalizer]);
+  }, [checkpoint, progress.attempts, progress.outcomes, progress.hints, sealed, dispatch, isTimeUp, readTimeUp, beginPause, endPause, registerFinalizer]);
+
+  const game = useMemo(() => computeGamification(progress), [progress]);
 
   const answered = checkpoint.exercises.filter(({ exercise }) =>
     Object.hasOwn(progress.outcomes, exercise.id),
@@ -176,7 +228,7 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
   const checkpointCount = journey.checkpoints.length;
 
   return (
-    <div className="space-y-4">
+    <div className="relative space-y-4">
       <div>
         <p className="text-sm text-muted">
           Чекпоинт {index + 1} из {checkpointCount}
@@ -189,6 +241,9 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
         deadline={deadline}
         totalSec={totalSec}
         stoppedAtSec={isDone ? (run?.timeLeftSec ?? 0) : null}
+        pausedAt={pausedAt}
+        companion={<MiniSakura game={game} />}
+        score={<ScoreLine game={game} />}
       />
 
       <JourneyExerciseContext.Provider value={api}>
@@ -235,10 +290,15 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
           progress={progress}
           index={index}
           checkpoint={checkpoint}
+          points={game.checkpoints[index]}
+          sakura={<Sakura leaves={game.leaves} started={game.startedCheckpoints} bloom={false} className="w-full" />}
           dispatch={dispatch}
           focusOnShow={!wasDoneOnOpen}
         />
       )}
+
+      {/* Колонка справа стоит в разметке последней: диктор сначала читает чекпоинт */}
+      <CompanionAside game={game} />
     </div>
   );
 }
@@ -274,17 +334,22 @@ function RestoredExercise({ question, outcome }: { question: string; outcome: Ex
   );
 }
 
-// Итог чекпоинта: сколько верно, сколько времени осталось, конспект и переход дальше
+// Итог чекпоинта: сколько верно, сколько времени осталось, разбор очков, конспект
+// и переход дальше. Сакура здесь — только на узком экране: на широком она в колонке рядом
 function CheckpointSummary({
   progress,
   index,
   checkpoint,
+  points,
+  sakura,
   dispatch,
   focusOnShow,
 }: {
   progress: JourneyProgress;
   index: number;
   checkpoint: PublicCheckpoint;
+  points: CheckpointPoints;
+  sakura: ReactNode;
   dispatch: (action: JourneyAction) => void;
   focusOnShow: boolean;
 }) {
@@ -296,7 +361,7 @@ function CheckpointSummary({
   }, [focusOnShow]);
 
   const outcomes = checkpoint.exercises.map(({ exercise }) => progress.outcomes[exercise.id]);
-  const correct = outcomes.filter((outcome) => outcome?.verdict === "correct").length;
+  const correct = outcomes.filter((outcome) => outcome !== undefined && isFullyCorrect(outcome)).length;
   const timeLeft = progress.runs[checkpoint.id]?.timeLeftSec ?? 0;
   const next = progress.journey.checkpoints[index + 1];
 
@@ -304,16 +369,34 @@ function CheckpointSummary({
     <section className="space-y-4 rounded-xl border border-accent bg-surface p-5">
       <h3 ref={headingRef} tabIndex={-1} className="flex items-center gap-2 text-lg font-semibold outline-none">
         <Flag size={20} aria-hidden="true" className="text-accent" />
-        Чекпоинт {index + 1} пройден
+        Чекпоинт {index + 1} пройден · +{pointsText(points.total)}
       </h3>
-      <div className="space-y-1 text-sm">
-        <p>
-          Верно {correct} из {outcomes.length}{" "}
-          {plural(outcomes.length, ["упражнения", "упражнений", "упражнений"])}
-        </p>
-        <p className="text-muted">
-          {timeLeft > 0 ? `Осталось времени: ${formatTime(timeLeft)}` : "Время вышло"}
-        </p>
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="w-36 shrink-0 space-y-1 xl:hidden">
+          {sakura}
+          <p className="text-xs leading-relaxed text-muted">{GROW_TEXT}</p>
+        </div>
+        <div className="min-w-60 flex-1 space-y-3 text-sm">
+          <div className="space-y-1">
+            <p>
+              Верно {correct} из {outcomes.length}{" "}
+              {plural(outcomes.length, ["упражнения", "упражнений", "упражнений"])}
+            </p>
+            <p className="text-muted">
+              {timeLeft > 0 ? `Осталось времени: ${formatTime(timeLeft)}` : "Время вышло"}
+            </p>
+          </div>
+          {points.clean && (
+            <p className="flex items-start gap-1.5">
+              <CircleCheck size={16} aria-hidden="true" className="mt-0.5 shrink-0 text-accent" />
+              <span>
+                <span className="font-medium">Чистый чекпоинт</span>
+                <span className="text-muted"> — всё верно с первой попытки, без подсказок</span>
+              </span>
+            </p>
+          )}
+          <PointsTable checkpoint={checkpoint} points={points} />
+        </div>
       </div>
 
       {/* В режиме «сразу проверить» конспект здесь показывается впервые — раскрыт */}
@@ -343,4 +426,52 @@ function CheckpointSummary({
       )}
     </section>
   );
+}
+
+// Разбор очков: за что сколько
+function PointsTable({ checkpoint, points }: { checkpoint: PublicCheckpoint; points: CheckpointPoints }) {
+  const byId = new Map(points.exercises.map((e) => [e.exerciseId, e]));
+  return (
+    <table className="w-full tabular-nums">
+      <caption className="sr-only">Очки за чекпоинт</caption>
+      <tbody>
+        {checkpoint.exercises.map(({ exercise }, n) => {
+          const item = byId.get(exercise.id);
+          return (
+            <tr key={exercise.id}>
+              <td className="py-0.5 pr-2">
+                Упражнение {n + 1}
+                {item && <span className="text-muted">{factorsText(item)}</span>}
+              </td>
+              <td className="py-0.5 text-right">{item?.points ?? 0}</td>
+            </tr>
+          );
+        })}
+        <tr className="border-t border-border">
+          <td className="py-0.5 pr-2">
+            Бонус за время
+            <span className="text-muted">
+              {points.timeShare
+                ? ` · осталось ${Math.round(points.timeShare * 100)}%`
+                : " · время вышло"}
+            </span>
+          </td>
+          <td className="py-0.5 text-right">+{points.bonus}</td>
+        </tr>
+        <tr className="font-medium">
+          <td className="py-0.5 pr-2">Итого</td>
+          <td className="py-0.5 text-right">{points.total}</td>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
+function factorsText(item: ExercisePoints): string {
+  const factors = [
+    item.secondAttempt && `вторая попытка ${factorText(SECOND_ATTEMPT_FACTOR)}`,
+    item.hint && `подсказка ${factorText(HINT_FACTOR)}`,
+    item.streakBonus && `серия ${factorText(STREAK_FACTOR)}`,
+  ].filter(Boolean);
+  return factors.length > 0 ? ` · ${factors.join(", ")}` : "";
 }

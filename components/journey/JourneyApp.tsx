@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useState } from "react";
-import { BookOpen, Flag, Sparkles, TriangleAlert, Zap } from "lucide-react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { AlarmClockCheck, BookOpen, CircleCheck, Flag, Sparkles, Target, TriangleAlert, Zap } from "lucide-react";
 import { plural } from "@/lib/plural";
 import { checkpointSeconds, formatTime } from "@/lib/journey/timing";
 import type { PublicJourney } from "@/lib/journey/types";
+import { computeGamification, isFullyCorrect, type Achievements } from "./gamification";
 import { JourneyCheckpoint } from "./JourneyCheckpoint";
+import { GROW_TEXT, pointsText } from "./JourneyCompanion";
 import { JourneyForm } from "./JourneyForm";
+import { Sakura } from "./Sakura";
 import {
   journeyReducer,
   loadProgress,
@@ -197,6 +200,9 @@ function JourneyStart({ progress, dispatch }: { progress: JourneyProgress; dispa
           переходы, и не останавливается, если перезагрузить страницу. Когда время выйдет, ответы
           отправятся как есть. Подсказка — по кнопке в упражнении.
         </p>
+        <p className="text-sm text-muted">
+          {GROW_TEXT} Каждый чекпоинт — новая ветка сакуры, а в конце путешествия она зацветёт.
+        </p>
       </section>
       <div className="flex flex-wrap gap-3">
         <button type="button" onClick={() => dispatch({ type: "choose", mode: "study", now: Date.now() })} className={PRIMARY_BUTTON}>
@@ -241,23 +247,36 @@ function JourneyStudy({ journey, dispatch }: { journey: PublicJourney; dispatch:
   );
 }
 
-// Конец путешествия — пока коротко: верные ответы и оставшееся время по чекпоинтам
+// Конец путешествия: сакура в цвету, очки, достижения и коротко по чекпоинтам
+// (подробный отчёт — отдельная итерация)
 function JourneyFinish({ progress, dispatch }: { progress: JourneyProgress; dispatch: (action: JourneyAction) => void }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     headingRef.current?.focus();
   }, []);
+  const game = useMemo(() => computeGamification(progress), [progress]);
+  const correct = Object.values(progress.outcomes).filter(isFullyCorrect).length;
+  const exerciseCount = progress.journey.checkpoints.reduce((sum, c) => sum + c.exercises.length, 0);
 
   return (
     <div className="space-y-4">
       <h2 ref={headingRef} tabIndex={-1} className="flex items-center gap-2 text-xl font-semibold outline-none">
         <Flag size={20} aria-hidden="true" className="text-accent" />
-        Путешествие пройдено
+        Путешествие пройдено · {pointsText(game.total)}
       </h2>
+      <div className="flex flex-wrap items-start gap-6 rounded-xl border border-border bg-surface p-5">
+        <Sakura leaves={game.leaves} started={game.startedCheckpoints} bloom className="w-40 shrink-0" />
+        <div className="min-w-60 flex-1 space-y-3">
+          <p className="text-sm text-muted tabular-nums">
+            Верно {correct} из {exerciseCount} · лучшая серия {game.bestStreak}
+          </p>
+          <AchievementList achievements={game.achievements} />
+        </div>
+      </div>
       <ol className="space-y-2">
         {progress.journey.checkpoints.map((checkpoint, index) => {
           const outcomes = checkpoint.exercises.map(({ exercise }) => progress.outcomes[exercise.id]);
-          const correct = outcomes.filter((outcome) => outcome?.verdict === "correct").length;
+          const correct = outcomes.filter((outcome) => outcome !== undefined && isFullyCorrect(outcome)).length;
           const timeLeft = progress.runs[checkpoint.id]?.timeLeftSec ?? 0;
           return (
             <li key={checkpoint.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg border border-border bg-surface p-3">
@@ -265,7 +284,8 @@ function JourneyFinish({ progress, dispatch }: { progress: JourneyProgress; disp
               <span className="flex-1">{checkpoint.title}</span>
               <span className="text-sm text-muted tabular-nums">
                 верно {correct} из {outcomes.length} ·{" "}
-                {timeLeft > 0 ? `осталось ${formatTime(timeLeft)}` : "время вышло"}
+                {timeLeft > 0 ? `осталось ${formatTime(timeLeft)}` : "время вышло"} ·{" "}
+                {pointsText(game.checkpoints[index]?.total ?? 0)}
               </span>
             </li>
           );
@@ -275,5 +295,59 @@ function JourneyFinish({ progress, dispatch }: { progress: JourneyProgress; disp
         Новое путешествие
       </button>
     </div>
+  );
+}
+
+// Три достижения, связанные с обучением; неполученные — приглушены, с причиной
+function AchievementList({ achievements }: { achievements: Achievements }) {
+  const { cleanCheckpoints, calibration, onTime } = achievements;
+  const items = [
+    {
+      Icon: CircleCheck,
+      title: "Чистый чекпоинт",
+      earned: cleanCheckpoints.length > 0,
+      note:
+        cleanCheckpoints.length > 0
+          ? `${plural(cleanCheckpoints.length, ["Чекпоинт", "Чекпоинты", "Чекпоинты"])} ${cleanCheckpoints.join(", ")}: всё верно с первой попытки, без подсказок`
+          : "Нет чекпоинта, где всё верно с первой попытки и без подсказок",
+    },
+    {
+      Icon: Target,
+      title: "Точная калибровка",
+      earned: typeof calibration === "object" && calibration !== null && calibration.earned,
+      note: !calibration
+        ? "Калибровки уверенности не было"
+        : calibration === "skipped"
+          ? "Калибровка уверенности осталась без оценки"
+          : calibration.earned
+          ? "Когда вы были уверены, вы были правы"
+          : calibration.confidentErrors > 0
+            ? `Уверенных ошибок: ${calibration.confidentErrors} из ${calibration.total}`
+            : "Уверенных верных ответов меньше половины",
+    },
+    {
+      Icon: AlarmClockCheck,
+      title: "Всё в срок",
+      earned: onTime === true,
+      note: onTime
+        ? "Все чекпоинты закончены до конца времени"
+        : "Нужно закончить каждый чекпоинт до конца времени и ответить верно хотя бы на половину",
+    },
+  ];
+  return (
+    <ul className="space-y-2 text-sm">
+      {items.map(({ Icon, title, earned, note }) => (
+        <li key={title} className="flex items-start gap-2 border-t border-border pt-2">
+          <Icon size={18} aria-hidden="true" className={`mt-0.5 shrink-0 ${earned ? "text-accent" : "text-subtle"}`} />
+          <div>
+            <p className={earned ? "font-medium" : "font-medium text-muted"}>
+              {title}
+              {!earned && " — не получено"}
+            </p>
+            <p className="text-muted">{note}</p>
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
