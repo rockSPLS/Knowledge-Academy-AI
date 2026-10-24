@@ -86,7 +86,10 @@ const common = {
   explanation: z.string(),
 };
 
-const generatedExerciseSchema = z.discriminatedUnion("type", [
+// Обычное объединение, а не z.discriminatedUnion: тот в JSON Schema даёт oneOf, а строгий
+// режим структурированного ответа у части провайдеров принимает только anyOf (HTTP 400).
+// Варианты различаются полем type, поэтому подходит всегда ровно один — смысл тот же
+const generatedExerciseSchema = z.union([
   z.object({
     type: z.literal("multiple-choice"),
     ...common,

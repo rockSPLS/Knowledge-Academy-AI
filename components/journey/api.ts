@@ -33,10 +33,14 @@ async function postJson<T>(url: string, body: unknown, signal?: AbortSignal): Pr
   }
   const data = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new JourneyApiError(
-      typeof data?.error === "string" ? data.error : "Что-то пошло не так. Попробуйте ещё раз.",
-      typeof data?.code === "string" ? data.code : "unknown",
-    );
+    if (typeof data?.error === "string") {
+      throw new JourneyApiError(data.error, typeof data?.code === "string" ? data.code : "unknown");
+    }
+    // 429 без нашего текста — ответил лимит Firewall на хостинге, а не наш сервер
+    if (response.status === 429) {
+      throw new JourneyApiError("Слишком много запросов. Попробуйте снова через несколько минут.", "rate-limited");
+    }
+    throw new JourneyApiError("Что-то пошло не так. Попробуйте ещё раз.", "unknown");
   }
   return data as T;
 }

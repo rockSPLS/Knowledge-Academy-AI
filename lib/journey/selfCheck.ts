@@ -5,7 +5,7 @@ import { CHECKPOINTS_MAX, CHECKPOINTS_MIN, checkPlan } from "./build";
 import { fixtures, replayModel, type Fixture } from "./fixtures";
 import { generateJourney } from "./generate";
 import { calibrationIndex, checkLayout, hasMisconception, layoutJourney, type CheckpointLayout } from "./layout";
-import { BASIC_TYPES, planSchema, type BasicType, type GeneratedType, type Plan, type PlanCheckpoint } from "./schemas";
+import { BASIC_TYPES, checkpointExercisesSchema, planSchema, type BasicType, type GeneratedType, type Plan, type PlanCheckpoint } from "./schemas";
 
 // Самопроверка генерации без запросов к модели — только при разработке
 // (POST /api/journey/dev { selfCheck: true }):
@@ -219,6 +219,9 @@ function checkSchema(expect: Expect) {
   // Та же настройка, с которой AI SDK превращает zod-схему в JSON Schema для модели
   const json = JSON.stringify(z.toJSONSchema(planSchema, { target: "draft-7", io: "input" }));
   expect(json.includes('"minItems":2'), "minItems не попал в JSON Schema плана");
+  // oneOf часть провайдеров в строгом режиме не принимает (HTTP 400) — только anyOf
+  const exercisesJson = JSON.stringify(z.toJSONSchema(checkpointExercisesSchema, { target: "draft-7", io: "input" }));
+  expect(!exercisesJson.includes('"oneOf"'), "в JSON Schema упражнений появился oneOf");
   const checkpoint = makeCheckpoint([], [], true);
   const plan = { suitable: true, problem: "", title: "Тема", doubts: [], checkpoints: [checkpoint] };
   expect(planSchema.safeParse(plan).success, "схема плана не принимает верный план");
