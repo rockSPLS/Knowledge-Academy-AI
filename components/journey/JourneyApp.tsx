@@ -194,6 +194,10 @@ function JourneyStart({ progress, dispatch }: { progress: JourneyProgress; dispa
           отправятся как есть. Подсказка — по кнопке в упражнении.
         </p>
         <p className="text-sm text-muted">
+          Очки: 10 за верный ответ с первой попытки. После трёх верных подряд — серия: следующие ответы
+          ×1,5. Закончите чекпоинт раньше — получите бонус за оставшееся время.
+        </p>
+        <p className="text-sm text-muted">
           {GROW_TEXT} Каждый чекпоинт — новая ветка сакуры, а в конце путешествия она зацветёт.
         </p>
       </section>
