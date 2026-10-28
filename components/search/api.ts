@@ -1,6 +1,10 @@
+import { setJourneyVectors } from "@/components/journey/saved";
 import type { SearchResponse } from "@/lib/search/types";
+import { searchContext } from "./context";
 
-// Запросы панели поиска к серверу. Ошибка превращается в SearchApiError с текстом,
+// Запросы панели поиска к серверу. Вместе с вопросом уходят сводка прогресса
+// и сохранённые путешествия (context.ts); векторы путешествий, которые посчитал сервер,
+// сохраняются вместе с путешествиями. Ошибка превращается в SearchApiError с текстом,
 // который можно показать (поле error ответа API).
 
 export class SearchApiError extends Error {}
@@ -8,14 +12,14 @@ export class SearchApiError extends Error {}
 // Эмбеддинг вопроса и ответ модели — до 35 секунд на сервере, ждём с запасом
 const SEARCH_TIMEOUT_MS = 60_000;
 
-async function postSearch(url: string, body: unknown): Promise<SearchResponse> {
+async function postSearch(url: string, body: Record<string, unknown>, question: string): Promise<SearchResponse> {
   const signal = AbortSignal.timeout(SEARCH_TIMEOUT_MS);
   let response: Response;
   try {
     response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, ...searchContext(question) }),
       signal,
     });
   } catch {
@@ -31,14 +35,16 @@ async function postSearch(url: string, body: unknown): Promise<SearchResponse> {
     }
     throw new SearchApiError("Что-то пошло не так. Попробуйте ещё раз.");
   }
-  return data as SearchResponse;
+  const result = data as SearchResponse;
+  if (result.journeyVectors) setJourneyVectors(result.journeyVectors);
+  return result;
 }
 
 export function searchMaterials(question: string): Promise<SearchResponse> {
-  return postSearch("/api/search", { question });
+  return postSearch("/api/search", { question }, question);
 }
 
 // Только при разработке: сохранённый ответ поиска, без запросов к модели
 export function loadFixtureSearch(fixture: string): Promise<SearchResponse> {
-  return postSearch("/api/search/dev", { fixture });
+  return postSearch("/api/search/dev", { fixture }, "");
 }

@@ -35,6 +35,23 @@ export function rankSemantic(
     .sort((a, b) => b.score - a.score);
 }
 
+// Поиск по смыслу по нескольким наборам фрагментов, у каждого свой вектор вопроса:
+// у фрагментов путешествий вектор короче, и вопрос сравнивается с ними началом своего
+// вектора той же длины. Номера фрагментов сквозные — по порядку наборов
+export function rankSemanticParts(
+  parts: { vectors: (number[] | null)[]; query: number[] }[],
+  minSimilarity = MIN_SIMILARITY,
+): Ranked[] {
+  let offset = 0;
+  const all: Ranked[] = [];
+  for (const part of parts) {
+    const start = offset;
+    all.push(...rankSemantic(part.vectors, part.query, minSimilarity).map((item) => ({ ...item, index: item.index + start })));
+    offset += part.vectors.length;
+  }
+  return all.sort((a, b) => b.score - a.score);
+}
+
 export function rankWords(index: WordIndex, question: string): Ranked[] {
   return scoreWords(index, question)
     .map((score, i) => ({ index: i, score }))

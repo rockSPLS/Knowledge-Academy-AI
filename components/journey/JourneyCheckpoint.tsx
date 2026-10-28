@@ -80,7 +80,7 @@ export function JourneyCheckpoint({ progress, index, dispatch }: JourneyCheckpoi
   // Чекпоинт закончен ещё до открытия страницы — фокус на итог не переводим
   const [wasDoneOnOpen] = useState(isDone);
 
-  // Ответ, пришедший после ухода с чекпоинта («Новое путешествие» во время проверки),
+  // Ответ, пришедший после ухода с чекпоинта («Мои путешествия» во время проверки),
   // не записывается: id упражнений в разных путешествиях совпадают
   const isMounted = useRef(false);
   useEffect(() => {

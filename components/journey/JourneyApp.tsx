@@ -1,44 +1,45 @@
 "use client";
 
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useReducer, useRef } from "react";
+import Link from "next/link";
 import { BookOpen, Sparkles, TriangleAlert, Zap } from "lucide-react";
 import { plural } from "@/lib/plural";
 import { checkpointSeconds, formatTime } from "@/lib/journey/timing";
 import type { PublicJourney } from "@/lib/journey/types";
-import { DiscardConfirm } from "./DiscardConfirm";
-import { downloadReport } from "./reportExport";
 import { JourneyCheckpoint } from "./JourneyCheckpoint";
 import { GROW_TEXT } from "./JourneyCompanion";
-import { JourneyForm } from "./JourneyForm";
 import { JourneyReport } from "./JourneyReport";
-import {
-  journeyReducer,
-  loadProgress,
-  saveProgress,
-  type JourneyAction,
-  type JourneyProgress,
-} from "./state";
+import { loadSavedJourney, saveJourney, type SavedJourney } from "./saved";
+import { journeyReducer, type JourneyAction, type JourneyProgress } from "./state";
 
-// Страница путешествия целиком: форма → старт (выбор «изучить» или «сразу проверить») →
-// конспекты (если выбрали «изучить») → чекпоинты по очереди → итоги (JourneyReport.tsx).
-// Состояние — в useReducer (state.ts) и в localStorage: перезагрузка страницы
-// возвращает туда же, где человек остановился.
+// Прохождение одного сохранённого путешествия: старт (выбор «изучить» или «сразу
+// проверить») → конспекты (если выбрали «изучить») → чекпоинты по очереди → итоги
+// (JourneyReport.tsx). Путешествие открывается по адресу /journey?id=<id> (JourneyPage.tsx).
+// Состояние — в useReducer (state.ts) и в списке сохранённых путешествий в localStorage
+// (saved.ts): перезагрузка страницы возвращает туда же, где человек остановился.
 
 const PRIMARY_BUTTON =
   "inline-flex items-center gap-2 rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-accent-fill-foreground transition-colors hover:bg-accent-fill-hover";
 const SECONDARY_BUTTON =
   "inline-flex items-center gap-2 rounded-md border border-transparent bg-accent-soft px-4 py-2 text-sm font-medium text-accent-soft-foreground transition-colors hover:border-accent";
 
-export function JourneyApp() {
-  // undefined — localStorage ещё не прочитан: на сервере его нет, поэтому читаем после загрузки
+export function JourneyApp({ journeyId }: { journeyId: string }) {
+  // undefined — localStorage ещё не прочитан: на сервере его нет, поэтому читаем после загрузки;
+  // null — путешествия с таким id нет (удалено или ссылка из другого браузера)
   const [state, dispatch] = useReducer(journeyReducer, undefined);
+  // Запись в списке: дата создания и векторы для поиска сохраняются вместе с прогрессом
+  const saved = useRef<SavedJourney | null>(null);
 
   useEffect(() => {
-    dispatch({ type: "load", progress: loadProgress() });
-  }, []);
+    saved.current = loadSavedJourney(journeyId);
+    dispatch({ type: "load", progress: saved.current?.progress ?? null });
+  }, [journeyId]);
 
   useEffect(() => {
-    if (state !== undefined) saveProgress(state);
+    if (state && saved.current) {
+      saved.current = { ...saved.current, progress: state };
+      saveJourney(saved.current);
+    }
   }, [state]);
 
   // Новый экран — к началу страницы (кнопка перехода была внизу)
@@ -51,13 +52,15 @@ export function JourneyApp() {
 
   if (state === null) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-3xl font-semibold">Путешествие по знаниям</h1>
-        <p className="text-lg text-muted">
-          Введите тему или вставьте текст — ИИ составит маршрут из нескольких чекпоинтов. В каждом —
-          короткий конспект одного понятия и упражнения на время: от простого к сложному.
+      <div className="space-y-4">
+        <h1 className="text-3xl font-semibold">Путешествие не найдено</h1>
+        <p className="text-muted">
+          Его удалили, или оно сохранено в другом браузере: путешествия хранятся только в том браузере,
+          где их составили.
         </p>
-        <JourneyForm onCreated={(generated) => dispatch({ type: "create", ...generated })} />
+        <Link href="/journey" className="inline-block text-accent underline underline-offset-4 hover:text-accent-hover">
+          Мои путешествия
+        </Link>
       </div>
     );
   }
@@ -65,12 +68,7 @@ export function JourneyApp() {
   const { stage } = state;
   return (
     <div className="space-y-6">
-      <JourneyHeader
-        journey={state.journey}
-        finished={stage.kind === "finished"}
-        onDownload={stage.kind === "finished" ? () => downloadReport(state) : undefined}
-        dispatch={dispatch}
-      />
+      <JourneyHeader journey={state.journey} />
       {stage.kind === "start" && <JourneyStart progress={state} dispatch={dispatch} />}
       {stage.kind === "study" && <JourneyStudy journey={state.journey} dispatch={dispatch} />}
       {stage.kind === "checkpoint" && (
@@ -86,50 +84,26 @@ export function JourneyApp() {
   );
 }
 
-// Название путешествия, пометка «составлено ИИ» и «Новое путешествие».
-// «Новое путешествие» спрашивает подтверждение (DiscardConfirm.tsx)
-function JourneyHeader({
-  journey,
-  finished,
-  onDownload,
-  dispatch,
-}: {
-  journey: PublicJourney;
-  finished: boolean;
-  onDownload?: () => void;
-  dispatch: (action: JourneyAction) => void;
-}) {
-  const [isConfirming, setConfirming] = useState(false);
-
+// Название путешествия, пометка «составлено ИИ» и «Мои путешествия» — к списку и форме
+// нового. Путешествие сохранено в списке, поэтому уйти к другому можно без подтверждения
+function JourneyHeader({ journey }: { journey: PublicJourney }) {
   return (
     <div className="space-y-2">
       {/* Кнопка — в строке с подписью, а не с названием: длинное название на телефоне
           переносило её на отдельную строку, и до первого вопроса было дальше */}
       <div>
-        {/* Без переноса кнопки: на самых узких экранах переносится подпись, а не кнопка.
-            min-h — высота кнопки: пока идёт подтверждение, кнопки нет, а строка не сжимается */}
+        {/* Без переноса кнопки: на самых узких экранах переносится подпись, а не кнопка */}
         <div className="flex min-h-[34px] items-center justify-between gap-3">
           <p className="text-sm text-muted">Путешествие по знаниям</p>
-          {!isConfirming && (
-            <button
-              type="button"
-              onClick={() => setConfirming(true)}
-              className="shrink-0 rounded-md border border-border-strong bg-background px-3 py-1.5 text-sm font-medium hover:bg-border print:hidden"
-            >
-              Новое путешествие
-            </button>
-          )}
+          <Link
+            href="/journey"
+            className="shrink-0 rounded-md border border-border-strong bg-background px-3 py-1.5 text-sm font-medium hover:bg-border print:hidden"
+          >
+            Мои путешествия
+          </Link>
         </div>
         <h1 className="text-3xl font-semibold">{journey.title}</h1>
       </div>
-      {isConfirming && (
-        <DiscardConfirm
-          finished={finished}
-          onDownload={onDownload}
-          onConfirm={() => dispatch({ type: "discard" })}
-          onCancel={() => setConfirming(false)}
-        />
-      )}
       <p className="flex items-center gap-1.5 text-sm text-muted">
         <Sparkles size={16} aria-hidden="true" className="text-accent" />
         Конспекты и вопросы составлены ИИ и могут содержать ошибки.

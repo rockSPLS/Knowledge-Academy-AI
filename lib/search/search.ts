@@ -1,23 +1,38 @@
 import "server-only";
 import { z } from "zod";
 import { generateStructured, type ModelResult } from "@/lib/llm/client";
+import { getExercise } from "@/lib/exercises/bank";
+import type { Verdict } from "@/lib/exercises/types";
 import { describeEmbeddingError, embedQuery, readEmbeddingConfig } from "./embeddings";
+import { decodeVector, encodeVector, journeyChunks, shortQuery, type JourneyChunk } from "./journeys";
+import { hasProgress, latestResults, progressBlock, resultLabel } from "./progress";
+import type { ProgressInput } from "./request";
 import { ANSWER_SYSTEM, answerPrompt, type PromptFragment } from "./prompts";
-import { combine, rankSemantic, rankWords, RESULT_COUNT } from "./rank";
+import { combine, rankSemanticParts, rankWords, RESULT_COUNT } from "./rank";
 import indexFile from "./search-index.json";
-import type { IndexedChunk, SearchAnswer, SearchIndexFile, SearchMode, SearchResponse, SearchSource } from "./types";
-import { buildWordIndex } from "./words";
+import type {
+  IndexedChunk,
+  JourneySearchInput,
+  SearchAnswer,
+  SearchIndexFile,
+  SearchMode,
+  SearchResponse,
+  SearchSource,
+} from "./types";
+import { buildWordIndex, extendWordIndex } from "./words";
 
 // Поиск по материалам портала и ответ модели по найденным фрагментам.
 // Индекс (search-index.json) читается только здесь, на сервере: в нём объяснения
-// упражнений, а в браузер уходят только SearchSource — путь, ссылка и начало текста,
-// у упражнения — только вопрос.
+// упражнений. В браузер уходят только SearchSource — путь, ссылка и начало текста,
+// у упражнения — вопрос, а объяснение — только если человек на него уже отвечал.
+// Кроме статей и упражнений поиск идёт по сохранённым путешествиям, которые браузер
+// присылает вместе с вопросом (journeys.ts), и учитывает сводку прогресса (progress.ts).
 //
 // 1. Вопрос → эмбеддинг вопроса → близость со всеми фрагментами, плюс поиск по словам;
 //    два списка сочетаются по рангам (rank.ts). Без настроек эмбеддингов или при ошибке
 //    сервиса — только по словам.
-// 2. Модель отвечает только по найденным фрагментам, со ссылками [N]. Модель недоступна
-//    или ответила не по схеме — фрагменты всё равно показываются, ответа нет.
+// 2. Модель отвечает только по найденным фрагментам и прогрессу, со ссылками [N].
+//    Модель недоступна или ответила не по схеме — фрагменты всё равно показываются, ответа нет.
 
 const index = indexFile as SearchIndexFile;
 const vectors = index.chunks.map((chunk) => chunk.embedding);
@@ -29,28 +44,79 @@ const ANSWER_MAX_OUTPUT_TOKENS = 1500;
 // Сколько символов текста раздела показывать в источнике
 const SNIPPET_LENGTH = 180;
 
-export type Found = { mode: SearchMode; chunks: IndexedChunk[] };
+// Сколько путешествий без векторов посчитать за один поиск. Обычно такое одно —
+// только что созданное; после смены модели эмбеддингов — все, и тогда они досчитываются
+// за несколько поисков, а запрос к сервису остаётся небольшим
+const MAX_JOURNEYS_EMBEDDED_PER_SEARCH = 5;
 
-export async function findChunks(question: string, abortSignal?: AbortSignal): Promise<Found> {
-  const byWords = rankWords(wordIndex, question);
+// Фрагмент поиска: раздел или упражнение из индекса либо чекпоинт путешествия из запроса
+export type Fragment = IndexedChunk | JourneyChunk;
+
+export type Found = {
+  mode: SearchMode;
+  chunks: Fragment[];
+  journeyVectors?: SearchResponse["journeyVectors"];
+};
+
+export async function findChunks(
+  question: string,
+  abortSignal?: AbortSignal,
+  journeys: JourneySearchInput[] = [],
+): Promise<Found> {
   const config = readEmbeddingConfig();
+  const model = config && index.model === config.model ? config.model : null;
+  if (config && !model) {
+    // Векторы разных моделей несравнимы: индекс нужно пересчитать (npm run search:index)
+    console.error(`[search] индекс посчитан моделью ${index.model ?? "—"}, а в настройках ${config.model} — ищем по словам`);
+  }
+
+  const perJourney = journeys.map((journey) => ({ journey, chunks: journeyChunks(journey, model) }));
+  const journeyList = perJourney.flatMap((item) => item.chunks);
+  const all: Fragment[] = [...index.chunks, ...journeyList];
+  const words = journeyList.length > 0 ? extendWordIndex(wordIndex, journeyList.map((chunk) => chunk.text)) : wordIndex;
+  const byWords = rankWords(words, question);
+
   let mode: SearchMode = "words";
   let ranked = byWords;
-  if (config && index.model === config.model) {
+  let journeyVectors: Found["journeyVectors"];
+  if (config && model) {
+    // Путешествия без векторов (или с испорченными) — в том же запросе к сервису, что и вопрос
+    const missing = perJourney
+      .filter((item) => item.chunks.some((chunk) => chunk.embedding === null))
+      .slice(0, MAX_JOURNEYS_EMBEDDED_PER_SEARCH);
     try {
-      const query = await embedQuery(config, question, abortSignal);
-      ranked = combine(rankSemantic(vectors, query), byWords);
+      const { query, documents } = await embedQuery(
+        config,
+        question,
+        abortSignal,
+        missing.flatMap((item) => item.chunks.map((chunk) => chunk.text)),
+      );
+      let next = 0;
+      journeyVectors = missing.map(({ journey, chunks }) => {
+        const data = chunks.map(() => encodeVector(documents[next++]));
+        // Тот же вектор, что сохранит браузер: и этот поиск, и следующие считают одинаково
+        chunks.forEach((chunk, i) => (chunk.embedding = decodeVector(data[i])));
+        return { journeyId: journey.id, model, data };
+      });
+      ranked = combine(
+        rankSemanticParts([
+          { vectors, query },
+          { vectors: journeyList.map((chunk) => chunk.embedding), query: shortQuery(query) },
+        ]),
+        byWords,
+      );
       mode = "semantic-and-words";
     } catch (error) {
       if (!abortSignal?.aborted) {
         console.error(`[search] эмбеддинг вопроса не получен, ищем по словам: ${describeEmbeddingError(error)}`);
       }
     }
-  } else if (config) {
-    // Векторы разных моделей несравнимы: индекс нужно пересчитать (npm run search:index)
-    console.error(`[search] индекс посчитан моделью ${index.model ?? "—"}, а в настройках ${config.model} — ищем по словам`);
   }
-  return { mode, chunks: ranked.slice(0, RESULT_COUNT).map((item) => index.chunks[item.index]) };
+  return {
+    mode,
+    chunks: ranked.slice(0, RESULT_COUNT).map((item) => all[item.index]),
+    ...(journeyVectors && journeyVectors.length > 0 && { journeyVectors }),
+  };
 }
 
 // Схема ответа модели
@@ -85,27 +151,48 @@ export const askAnswer: AskAnswer = ({ system, prompt, abortSignal }) =>
     abortSignal,
   });
 
-// Полный ответ маршрута: найденные фрагменты как источники и ответ модели (или null)
-export async function searchAndAnswer(
-  question: string,
-  ask: AskAnswer = askAnswer,
-  abortSignal?: AbortSignal,
-  found?: Found,
-): Promise<SearchResponse> {
-  const { mode, chunks } = found ?? (await findChunks(question, abortSignal));
-  const sources = chunks.map(toSource);
-  if (chunks.length === 0) return { question, mode, sources, answer: null, notInMaterials: false };
+export type SearchRequest = {
+  question: string;
+  journeys?: JourneySearchInput[];
+  progress?: ProgressInput;
+  ask?: AskAnswer;
+  abortSignal?: AbortSignal;
+  // Уже найденные фрагменты (сохранённые ответы и их запись — lib/search/fixtures.ts)
+  found?: Found;
+};
 
+// Полный ответ маршрута: найденные фрагменты как источники и ответ модели (или null).
+// Если ничего не нашлось, но прогресс есть, модель всё равно отвечает — по прогрессу:
+// вопрос может быть о самом человеке («где я ошибался?»)
+export async function searchAndAnswer({
+  question,
+  journeys,
+  progress,
+  ask = askAnswer,
+  abortSignal,
+  found,
+}: SearchRequest): Promise<SearchResponse> {
+  const { mode, chunks, journeyVectors } = found ?? (await findChunks(question, abortSignal, journeys));
+  const results = latestResults(progress);
+  const sources = chunks.map((chunk, i) => toSource(chunk, i, results));
+  const base = { question, mode, sources, ...(journeyVectors && { journeyVectors }) };
+  if (chunks.length === 0 && !hasProgress(progress)) return { ...base, answer: null, notInMaterials: false };
+
+  const foundTopics = chunks.flatMap((chunk) => (chunk.kind === "journey" ? [] : [`${chunk.articleSlug}#${chunk.sectionId}`]));
   const result = await ask({
     question,
     chunkIds: chunks.map((chunk) => chunk.id),
     system: ANSWER_SYSTEM,
-    prompt: answerPrompt(question, chunks.map(toPromptFragment)),
+    prompt: answerPrompt(
+      question,
+      chunks.map((chunk) => toPromptFragment(chunk, results)),
+      progressBlock(progress, foundTopics),
+    ),
     abortSignal,
   });
-  if (!result.ok) return { question, mode, sources, answer: null, notInMaterials: false };
+  if (!result.ok) return { ...base, answer: null, notInMaterials: false };
   const answer = checkAnswer(result.data, chunks.length);
-  return { question, mode, sources, answer, notInMaterials: answer !== null && !result.data.inMaterials };
+  return { ...base, answer, notInMaterials: answer !== null && !result.data.inMaterials };
 }
 
 // Проверка ответа модели: номера источников в тексте — только из переданных фрагментов,
@@ -114,6 +201,8 @@ export async function searchAndAnswer(
 export function checkAnswer(output: AnswerOutput, count: number): SearchAnswer | null {
   const valid = (n: number) => Number.isInteger(n) && n >= 1 && n <= count;
   const text = output.answer
+    // Пометка «из прогресса», которую модель иногда ставит вместо номера, — не источник
+    .replace(/\[(?:progress|прогресс)\]/gi, "")
     .replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (_, list: string) =>
       list
         .split(",")
@@ -129,20 +218,51 @@ export function checkAnswer(output: AnswerOutput, count: number): SearchAnswer |
   return { text };
 }
 
-function toSource(chunk: IndexedChunk, i: number): SearchSource {
+function toSource(chunk: Fragment, i: number, results: Map<string, Verdict>): SearchSource {
+  const number = i + 1;
+  if (chunk.kind === "journey") {
+    return {
+      number,
+      kind: "journey",
+      // Рядом с путём — ярлык «Путешествие», поэтому в пути только название; модели и поиску
+      // путь остаётся прежним (lib/search/journeys.ts)
+      path: [`«${chunk.journeyTitle}»`, ...chunk.path.slice(1)],
+      href: `/journey?id=${encodeURIComponent(chunk.journeyId)}`,
+      snippet: snippet(chunk.summary),
+      journeyId: chunk.journeyId,
+    };
+  }
+  const href = `/articles/${chunk.articleSlug}${chunk.sectionId ? `#${chunk.sectionId}` : ""}`;
+  if (chunk.kind === "section") {
+    return { number, kind: "section", path: chunk.path, href, snippet: snippet(sectionBody(chunk)) };
+  }
+  // Упражнение: ярлык и объяснение — только если человек на него уже отвечал
+  const answered = answeredExercise(chunk, results);
   return {
-    number: i + 1,
-    kind: chunk.kind,
+    number,
+    kind: "exercise",
     path: chunk.path,
-    href: `/articles/${chunk.articleSlug}${chunk.sectionId ? `#${chunk.sectionId}` : ""}`,
-    snippet: chunk.kind === "exercise" ? (chunk.question ?? "") : snippet(sectionBody(chunk)),
+    href,
+    snippet: chunk.question ?? "",
+    ...(answered && { result: resultLabel(answered.verdict), explanation: answered.explanation }),
   };
 }
 
-function toPromptFragment(chunk: IndexedChunk): PromptFragment {
-  return chunk.kind === "exercise"
-    ? { kind: "exercise", path: chunk.path, question: chunk.question ?? "" }
-    : { kind: "section", path: chunk.path, text: sectionBody(chunk) };
+function toPromptFragment(chunk: Fragment, results: Map<string, Verdict>): PromptFragment {
+  if (chunk.kind === "journey") return { kind: "journey", path: chunk.path, text: chunk.summary };
+  if (chunk.kind === "section") return { kind: "section", path: chunk.path, text: sectionBody(chunk) };
+  const answered = answeredExercise(chunk, results);
+  return { kind: "exercise", path: chunk.path, question: chunk.question ?? "", ...(answered && { answered }) };
+}
+
+// Упражнение, на которое человек уже отвечал: его последний итог и объяснение верного ответа
+function answeredExercise(
+  chunk: IndexedChunk,
+  results: Map<string, Verdict>,
+): { verdict: Verdict; explanation: string } | null {
+  const verdict = chunk.exerciseId ? results.get(chunk.exerciseId) : undefined;
+  const explanation = verdict && chunk.exerciseId ? getExercise(chunk.exerciseId)?.explanation : undefined;
+  return verdict && explanation ? { verdict, explanation } : null;
 }
 
 // Текст раздела без пути «Статья › Раздел» в начале

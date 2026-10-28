@@ -8,6 +8,7 @@ import {
   FREE_ANSWER_CRITERIA_MIN,
 } from "@/lib/exercises/limits";
 import { normalizeText } from "@/lib/exercises/text";
+import { MAX_JOURNEY_TEXT } from "@/lib/progress/types";
 import type { Exercise, FreeAnswerKind } from "@/lib/exercises/types";
 import { calibrationIndex, type CheckpointLayout } from "./layout";
 import type { CheckpointExercises, GeneratedExercise, GeneratedType, Plan, PlanCheckpoint } from "./schemas";
@@ -22,8 +23,9 @@ import type { Checkpoint, Difficulty, JourneyExercise, SourceDoubt } from "./typ
 export const CHECKPOINTS_MIN = 3;
 export const CHECKPOINTS_MAX = 5;
 const DOUBTS_MAX = 3;
-// Потолок длины любой строки в ответе модели: защита от «простыней» и зацикливания
-const MAX_TEXT_LENGTH = 1500;
+// Потолок длины любой строки в ответе модели: защита от «простыней» и зацикливания.
+// Тот же предел проверяет поиск у сохранённых путешествий (lib/search/request.ts)
+const MAX_TEXT_LENGTH = MAX_JOURNEY_TEXT;
 // Допустимый ответ в пропуске не длиннее того, что можно ввести в поле
 // (схема ответа «Заполните пропуски» — до 60 символов)
 const MAX_BLANK_ANSWER_LENGTH = 60;

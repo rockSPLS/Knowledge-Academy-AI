@@ -98,8 +98,7 @@ export type JourneyAction =
   | { type: "hint"; exerciseId: string; hint: string }
   // Время чекпоинта стояло, пока ИИ оценивал ответ: момент окончания сдвигается на паузу
   | { type: "extendDeadline"; checkpointId: string; ms: number }
-  | { type: "finish"; now: number }
-  | { type: "discard" };
+  | { type: "finish"; now: number };
 
 // undefined — состояние ещё не прочитано из localStorage
 export type JourneyState = JourneyProgress | null | undefined;
@@ -119,7 +118,6 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
       hints: {},
     };
   }
-  if (action.type === "discard") return null;
   if (!state) return state;
 
   switch (action.type) {
@@ -224,21 +222,8 @@ function beginCheckpoint(state: JourneyProgress, index: number, now: number): Jo
   return { ...state, runs, stage: { kind: "checkpoint", index } };
 }
 
-// ---------- Хранение в localStorage ----------
-
-const STORAGE_KEY = "journey-progress";
-
-export function loadProgress(): JourneyProgress | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const progress: unknown = JSON.parse(raw);
-    // Сохранено старой версией страницы или испорчено — начинаем заново
-    return isValidProgress(progress) ? progress : null;
-  } catch {
-    return null;
-  }
-}
+// ---------- Проверка сохранённого прогресса ----------
+// Хранение — в saved.ts: несколько путешествий, у каждого свой прогресс
 
 // Типы упражнений, которые умеет показывать страница
 const KNOWN_TYPES = new Set([
@@ -283,7 +268,7 @@ const isOutcome = (o: unknown) =>
 
 // Проверка сохранённого прогресса: страница не должна падать на испорченных данных.
 // Поля самих упражнений не проверяются — при смене формата повышается version
-function isValidProgress(value: unknown): value is JourneyProgress {
+export function isValidProgress(value: unknown): value is JourneyProgress {
   const p = value as JourneyProgress;
   if (!isRecord(p) || p.version !== 1 || typeof p.sealed !== "string") return false;
   if (p.finishedAt !== undefined && !Number.isFinite(p.finishedAt)) return false;
@@ -325,15 +310,6 @@ function isValidProgress(value: unknown): value is JourneyProgress {
     return checkpoint !== undefined && isRecord(p.runs[checkpoint.id]);
   }
   return stage.kind === "start" || stage.kind === "study" || stage.kind === "finished";
-}
-
-export function saveProgress(progress: JourneyProgress | null): void {
-  try {
-    if (progress) localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
-    else localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // localStorage недоступен или переполнен — прохождение работает, но не переживёт перезагрузку
-  }
 }
 
 // Упражнения чекпоинта закончены — все с итогом

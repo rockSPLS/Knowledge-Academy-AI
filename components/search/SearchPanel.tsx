@@ -4,12 +4,16 @@ import { useEffect, useId, useRef } from "react";
 import Link from "next/link";
 import { LoaderCircle, Search, TriangleAlert, X } from "lucide-react";
 import { MAX_QUESTION_LENGTH } from "@/lib/llm/limits";
+import { useSavedJourneys } from "@/components/progress/hooks";
+import { formatDate } from "@/lib/progress/format";
 import type { SearchResponse, SearchSource } from "@/lib/search/types";
 import { useSearch, WIDE_QUERY } from "./SearchProvider";
 
 // Боковая панель поиска по материалам. Устройство и поведение на широком и узком
 // экране — в SearchProvider.tsx. Текст ответа модели и фрагментов выводится только
 // как текст; номера [N] превращаются в ссылки на источники кодом, а не разметкой из ответа.
+// Ярлыки у источников ставит код: «Упражнение» и «Путешествие» — по виду фрагмента,
+// «Вы ответили верно» и «Стоит повторить» — по последнему ответу человека на упражнение.
 
 // Только при разработке: сохранённые ответы поиска (POST /api/search/dev) —
 // панель можно проверять без запросов к модели
@@ -134,9 +138,11 @@ export function SearchPanel() {
 }
 
 function Result({ result, onSourceClick }: { result: SearchResponse; onSourceClick: () => void }) {
-  if (result.sources.length === 0) {
+  if (result.sources.length === 0 && !result.answer) {
     return <p className="text-sm">В материалах портала об этом ничего не нашлось.</p>;
   }
+  // Поиск ничего не нашёл, а модель ответила по прогрессу (вопрос о самом человеке)
+  const byProgressOnly = result.sources.length === 0;
   return (
     <>
       {result.answer ? (
@@ -150,7 +156,9 @@ function Result({ result, onSourceClick }: { result: SearchResponse; onSourceCli
           <p className="text-xs text-subtle">
             {result.notInMaterials
               ? "Ответ составлен ИИ."
-              : "Ответ составлен ИИ по материалам портала. Сверяйтесь с источниками."}
+              : byProgressOnly
+                ? "Ответ составлен ИИ по вашему прогрессу."
+                : "Ответ составлен ИИ по материалам портала. Сверяйтесь с источниками."}
           </p>
         </div>
       ) : (
@@ -161,6 +169,7 @@ function Result({ result, onSourceClick }: { result: SearchResponse; onSourceCli
         </p>
       )}
 
+      {!byProgressOnly && (
       <section aria-labelledby="search-sources" className="space-y-3">
         {/* Модель сказала, что в материалах ответа нет: фрагменты — не источники ответа,
             а просто то, что нашёл поиск, и они могут быть далеки от вопроса */}
@@ -173,6 +182,7 @@ function Result({ result, onSourceClick }: { result: SearchResponse; onSourceCli
           ))}
         </ol>
       </section>
+      )}
     </>
   );
 }
@@ -204,21 +214,45 @@ function AnswerText({
   });
 }
 
+const TAG = "mr-2 rounded-md px-1.5 py-0.5 text-xs font-medium";
+const KIND_TAG = `${TAG} bg-accent-soft text-accent-soft-foreground`;
+
 function SourceItem({ source, onSourceClick }: { source: SearchSource; onSourceClick: () => void }) {
   return (
     <li className="flex gap-2 text-sm">
       <span className="w-5 shrink-0 text-subtle">{source.number}.</span>
       <div className="min-w-0 space-y-1">
-        {source.kind === "exercise" ? (
+        {source.kind === "journey" ? (
+          <>
+            <p>
+              <span className={KIND_TAG}>Путешествие</span>
+              <Link
+                href={source.href}
+                onClick={onSourceClick}
+                className="font-medium text-accent underline underline-offset-4 hover:text-accent-hover"
+              >
+                {source.path.join(" › ")}
+              </Link>
+            </p>
+            <JourneyDate journeyId={source.journeyId} />
+            <p className="text-muted">{source.snippet}</p>
+          </>
+        ) : source.kind === "exercise" ? (
           <>
             <p className="text-muted">{source.path.join(" › ")}</p>
             <p>
-              <span className="mr-2 rounded-md bg-accent-soft px-1.5 py-0.5 text-xs font-medium text-accent-soft-foreground">
-                Упражнение
-              </span>
+              <span className={KIND_TAG}>Упражнение</span>
+              {source.result && <ResultTag result={source.result} />}
               {source.snippet}
             </p>
-            <p className="text-xs text-subtle">Объяснение откроется, когда вы ответите на этот вопрос</p>
+            {source.explanation ? (
+              <p className="text-muted">
+                <span className="font-medium text-foreground">Объяснение: </span>
+                {source.explanation}
+              </p>
+            ) : (
+              <p className="text-xs text-subtle">Объяснение откроется, когда вы ответите на этот вопрос</p>
+            )}
             <Link
               href={source.href}
               onClick={onSourceClick}
@@ -243,4 +277,20 @@ function SourceItem({ source, onSourceClick }: { source: SearchSource; onSourceC
       </div>
     </li>
   );
+}
+
+// Ярлык по последнему ответу на упражнение: верный — зелёный «Вы ответили верно»,
+// неверный или частичный — «Стоит повторить»
+function ResultTag({ result }: { result: "correct" | "review" }) {
+  return result === "correct" ? (
+    <span className={`${TAG} border border-success-border bg-success-soft text-success`}>Вы ответили верно</span>
+  ) : (
+    <span className={`${TAG} border border-warning-border bg-warning-soft text-warning`}>Стоит повторить</span>
+  );
+}
+
+// Дата путешествия — из сохранённого в браузере: на сервер она не уходит
+function JourneyDate({ journeyId }: { journeyId?: string }) {
+  const journey = useSavedJourneys()?.find((item) => item.id === journeyId);
+  return journey ? <p className="text-xs text-subtle">{formatDate(journey.createdAt)}</p> : null;
 }

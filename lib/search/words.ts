@@ -81,11 +81,22 @@ export type WordIndex = {
 };
 
 export function buildWordIndex(texts: string[]): WordIndex {
-  const documents = texts.map((text) => {
-    const counts = new Map<string, number>();
-    for (const term of terms(text)) counts.set(term, (counts.get(term) ?? 0) + 1);
-    return counts;
-  });
+  return indexOf(texts.map(countTerms));
+}
+
+// Индекс с добавленными текстами (фрагментами путешествий из запроса): тексты исходного
+// индекса заново не разбираются, пересчитываются только частоты и средняя длина
+export function extendWordIndex(base: WordIndex, texts: string[]): WordIndex {
+  return indexOf([...base.documents, ...texts.map(countTerms)]);
+}
+
+function countTerms(text: string): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const term of terms(text)) counts.set(term, (counts.get(term) ?? 0) + 1);
+  return counts;
+}
+
+function indexOf(documents: Map<string, number>[]): WordIndex {
   const lengths = documents.map((counts) => [...counts.values()].reduce((sum, n) => sum + n, 0));
   const documentFrequency = new Map<string, number>();
   for (const counts of documents) {

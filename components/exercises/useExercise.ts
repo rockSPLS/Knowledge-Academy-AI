@@ -5,12 +5,17 @@ import type { CheckResult } from "@/lib/exercises/types";
 import { useTestContext } from "@/components/test/TestContext";
 import { useJourneyExercise } from "@/components/journey/JourneyExerciseContext";
 import { JourneyApiError } from "@/components/journey/api";
+import { useExerciseInfo } from "@/components/progress/ExerciseInfo";
+import { recordAnswer } from "@/components/progress/store";
+import type { ChoiceAnswer } from "@/lib/progress/types";
 
 // Общая логика любого упражнения: отправить ответ на проверку,
 // хранить статус и результат, раскрыть ответ по запросу,
 // в тесте — сообщать черновик ответа и результат, отправлять ответ по «Завершить тест»,
 // в путешествии — проверять по зашифрованному путешествию, считать попытки
 // и отправлять ответ как есть, когда время чекпоинта вышло.
+// Проверенный ответ в статье и в тесте записывается в прогресс (components/progress/store.ts);
+// «Показать ответ» — не новый ответ и не записывается.
 // Каждый тип упражнения использует этот хук и добавляет только свой способ ввода ответа.
 
 // skipped — путешествие: время вышло, а ответа не было (или свободный ответ пропущен
@@ -60,6 +65,7 @@ export function useExercise<TAnswer>(
 ) {
   const test = useTestContext();
   const journey = useJourneyExercise();
+  const info = useExerciseInfo();
   // Путешествие выглядит как статья: своя кнопка «Проверить» и итог сразу
   const mode: ExerciseMode = test ? "test" : "inline";
   const [status, setStatus] = useState<ExerciseStatus>("idle");
@@ -102,6 +108,20 @@ export function useExercise<TAnswer>(
       setResult(checked);
       setStatus("checked");
       test?.report(exerciseId, checked);
+      if (info) {
+        recordAnswer(
+          {
+            exerciseId,
+            place: test ? "test" : "article",
+            verdict: checked.verdict,
+            score: checked.score,
+            topic: info.topic,
+            // Сам ответ сохранится только у упражнений с выбором (recordAnswer смотрит тип)
+            answer: answer as ChoiceAnswer,
+          },
+          info.type,
+        );
+      }
       return true;
     } catch (error) {
       setErrorMessage(error instanceof JourneyApiError ? error.message : null);

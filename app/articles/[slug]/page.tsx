@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArticleTimer } from "@/components/progress/ArticleTimer";
 import { articles, getArticle, getNextArticle } from "@/lib/articles";
 
 // Все статьи известны заранее — страницы собираются статически при сборке.
@@ -32,6 +33,8 @@ export default async function ArticlePage({ params }: PageProps<"/articles/[slug
 
   return (
     <article>
+      {/* Время на статье — в прогресс: пока вкладка видна, с паузой без действий */}
+      <ArticleTimer slug={slug} />
       <Link
         href="/"
         className="inline-flex items-center gap-1 text-sm text-muted hover:text-foreground"

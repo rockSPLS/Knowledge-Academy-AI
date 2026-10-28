@@ -19,7 +19,7 @@ import { SearchPanel } from "./SearchPanel";
 // Пока панель открыта, у обёртки страницы стоит data-search-open: вариант Tailwind
 // search-open (globals.css) убирает из-под панели то, что закреплено у правого края окна.
 
-const STORAGE_KEY = "search-panel";
+export const STORAGE_KEY = "search-panel";
 // Ширина, с которой панель стоит сбоку (брейкпоинт lg)
 export const WIDE_QUERY = "(min-width: 1024px)";
 
@@ -106,7 +106,10 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
         // Вопрос из ответа (у сохранённого ответа он свой) — только если поле не меняли
         if (questionRef.current.trim() === asked.trim()) setQuestion(result.question);
         try {
-          sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ question: result.question, result }));
+          // Векторы путешествий уже сохранены вместе с путешествиями (api.ts) — здесь они не нужны
+          const saved = { ...result };
+          delete saved.journeyVectors;
+          sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ question: result.question, result: saved }));
         } catch {
           // Не сохранилось — после перезагрузки ответа просто не будет
         }

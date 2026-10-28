@@ -60,15 +60,21 @@ export async function embedTexts(
   return embeddings.map(shorten);
 }
 
-// Эмбеддинг вопроса. Без повторов: если сервис не ответил сразу (например, исчерпан
-// его лимит запросов в минуту), поиск сразу идёт по словам, а не ждёт
+// Эмбеддинг вопроса — и в том же запросе тексты, которым вектор ещё нужен (фрагменты
+// новых путешествий): у сервиса лимит запросов в минуту, и лишний запрос на каждый поиск
+// его бы съедал. Без повторов: если сервис не ответил сразу (например, исчерпан лимит),
+// поиск сразу идёт по словам, а не ждёт
 export async function embedQuery(
   config: EmbeddingConfig,
   question: string,
   abortSignal?: AbortSignal,
-): Promise<number[]> {
-  const [vector] = await embedTexts(config, [QUERY_INSTRUCTION + question], { abortSignal, maxRetries: 0 });
-  return vector;
+  documents: string[] = [],
+): Promise<{ query: number[]; documents: number[][] }> {
+  const [query, ...rest] = await embedTexts(config, [QUERY_INSTRUCTION + question, ...documents], {
+    abortSignal,
+    maxRetries: 0,
+  });
+  return { query, documents: rest };
 }
 
 // Начало вектора длиной EMBEDDING_DIMENSIONS, нормированное к длине 1.

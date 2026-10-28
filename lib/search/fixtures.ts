@@ -1,8 +1,9 @@
 import "server-only";
 import type { ModelResult } from "@/lib/llm/client";
-import { answerSchema, type AnswerOutput, type AskAnswer, type Found } from "./search";
+import { journeyChunks } from "./journeys";
+import { answerSchema, type AnswerOutput, type AskAnswer, type Found, type Fragment } from "./search";
 import indexFile from "./search-index.json";
-import type { SearchIndexFile, SearchMode } from "./types";
+import type { JourneySearchInput, SearchIndexFile, SearchMode } from "./types";
 import hallucination from "./fixtures/hallucination.json";
 import notInMaterials from "./fixtures/not-in-materials.json";
 import nothingFound from "./fixtures/nothing-found.json";
@@ -13,7 +14,9 @@ import wordsOnly from "./fixtures/words-only.json";
 // нашёл поиск (id фрагментов индекса) и что ответила модель — в том виде, в каком она
 // ответила: null — ответ не по схеме, "unavailable" — модель была недоступна.
 // Фрагменты берутся из текущего индекса, а ответ модели проходит ту же проверку
-// номеров источников, что и настоящий.
+// номеров источников, что и настоящий. Фрагмент путешествия записан как
+// journey-title:<название путешествия>#<номер чекпоинта с нуля>: id путешествий у каждого
+// браузера свои, поэтому при повторе он ищется среди путешествий из запроса по названию.
 
 export type SearchFixture = {
   description: string;
@@ -33,11 +36,22 @@ export const searchFixtures: Record<string, SearchFixture> = {
 const index = indexFile as SearchIndexFile;
 
 // Найденные фрагменты из сохранённого ответа; null — какого-то фрагмента уже нет в индексе
-// (статью изменили) и сохранённый ответ нужно записать заново
-export function fixtureFound(fixture: SearchFixture): Found | null {
-  const chunks = fixture.chunkIds.map((id) => index.chunks.find((chunk) => chunk.id === id));
+// (статью изменили) или нужного путешествия нет среди присланных, и сохранённый ответ
+// нужно записать заново (или сначала создать путешествие из примера)
+export function fixtureFound(fixture: SearchFixture, journeys: JourneySearchInput[]): Found | null {
+  const chunks = fixture.chunkIds.map((id): Fragment | undefined => {
+    const journey = /^journey-title:(.+)#(\d+)$/.exec(id);
+    if (!journey) return index.chunks.find((chunk) => chunk.id === id);
+    const saved = journeys.find((item) => item.title === journey[1]);
+    return saved ? journeyChunks(saved, null)[Number(journey[2])] : undefined;
+  });
   if (chunks.some((chunk) => !chunk)) return null;
   return { mode: fixture.mode, chunks: chunks.map((chunk) => chunk!) };
+}
+
+// id фрагмента для записи сохранённого ответа
+export function toFixtureChunkId(chunk: Fragment): string {
+  return chunk.kind === "journey" ? `journey-title:${chunk.journeyTitle}#${chunk.checkpointIndex}` : chunk.id;
 }
 
 // «Модель», которая отвечает сохранённым ответом
@@ -53,7 +67,6 @@ export function replayAnswer(fixture: SearchFixture): AskAnswer {
 export function recordingAnswer(inner: AskAnswer, into: Partial<SearchFixture>): AskAnswer {
   return async (request) => {
     const result = await inner(request);
-    into.chunkIds = request.chunkIds;
     into.answer = result.ok ? result.data : result.reason === "invalid-output" ? null : "unavailable";
     return result;
   };

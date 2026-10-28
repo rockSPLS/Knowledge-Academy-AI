@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useReducer, useRef } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from "react";
+import { recordTestAttempt } from "@/components/progress/store";
+import { useActiveTime } from "@/components/progress/useActiveTime";
 import type { CheckResult } from "@/lib/exercises/types";
 
 // Тестовый режим. TestProvider хранит результаты всех упражнений теста,
@@ -10,6 +12,10 @@ import type { CheckResult } from "@/lib/exercises/types";
 // Ответы отправляются одной кнопкой «Завершить тест»: до этого каждое упражнение
 // сообщает тесту черновик — заполнен ли ответ и начат ли он. Из черновиков считаются
 // счётчик «Готово N из M», пропущенные вопросы и незаполненные при попытке завершить.
+//
+// Завершённая попытка записывается в прогресс: дата, счёт и время прохождения — от первого
+// ответа, который начали заполнять, до завершения, с паузой после 2 минут без действий,
+// как время на статьях (components/progress/useActiveTime.ts).
 
 // Черновик ответа: ready — ответ заполнен и его можно отправить;
 // touched — пользователь уже начал отвечать (что-то выбрал, ввёл, переставил)
@@ -101,6 +107,23 @@ export function TestProvider({ exerciseIds, children }: TestProviderProps) {
     };
   }, []);
 
+  // Время попытки: идёт с первого начатого ответа до завершения теста
+  const isStarted = Object.values(state.drafts).some((draft) => draft.touched);
+  const isFinished = exerciseIds.length > 0 && exerciseIds.every((id) => Object.hasOwn(state.results, id));
+  const seconds = useRef(0);
+  useActiveTime(isStarted && !isFinished, (active) => {
+    seconds.current += active;
+  });
+  // Попытка записывается один раз — когда тест завершён. Время к этому моменту уже
+  // досчитано: счёт выключился в том же обновлении, а его уборка идёт раньше этого эффекта
+  const recordedAttempt = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isFinished || recordedAttempt.current === attempt) return;
+    recordedAttempt.current = attempt;
+    const score = exerciseIds.reduce((sum, id) => sum + (state.results[id]?.score ?? 0), 0);
+    recordTestAttempt({ at: Date.now(), score, total: exerciseIds.length, seconds: Math.round(seconds.current) });
+  }, [isFinished, attempt, exerciseIds, state.results]);
+
   const value = useMemo<TestContextValue>(() => {
     const answered = exerciseIds.filter((id) => Object.hasOwn(state.results, id));
     const score = answered.reduce((sum, id) => sum + state.results[id].score, 0);
@@ -138,6 +161,7 @@ export function TestProvider({ exerciseIds, children }: TestProviderProps) {
       },
       restart: () => {
         dispatch({ type: "reset" });
+        seconds.current = 0;
         nextAttempt();
       },
     };
