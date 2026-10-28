@@ -28,6 +28,10 @@ const EVALUATIONS_PER_JOURNEY = 5;
 export const EVALUATION_LIMIT_PER_IP = RATE_LIMIT_PER_IP * EVALUATIONS_PER_JOURNEY;
 export const EVALUATION_LIMIT_GLOBAL = RATE_LIMIT_GLOBAL * EVALUATIONS_PER_JOURNEY;
 
+// Путешествие по материалам портала: тема — короткая строка, как вопрос поиска; по ней ищутся
+// разделы статей. Запрос — тема и сводка прогресса; он помещается в MAX_REQUEST_BYTES
+export const MAX_PORTAL_TOPIC_LENGTH = 300;
+
 // Поиск по материалам: максимальная длина вопроса, символов. Вопрос — одна-две фразы;
 // длинный текст поиск не улучшает, а запрос к модели делает дороже
 export const MAX_QUESTION_LENGTH = 300;

@@ -25,7 +25,18 @@ export type Checkpoint = {
   // id более ранних чекпоинтов, на которые опирается этот
   dependsOn: string[];
   exercises: JourneyExercise[];
+  // Путешествие по материалам портала: разделы статей, на которых построен чекпоинт.
+  // Ссылки строит сервер по проверенным номерам фрагментов (lib/journey/portal.ts).
+  // У путешествий по своей теме или тексту поля нет
+  sources?: CheckpointSource[];
 };
+
+// Источник чекпоинта: путь «Статья › Раздел» и ссылка на раздел
+export type CheckpointSource = { path: string[]; href: string };
+
+// Из чего составлено путешествие: "portal" — из разделов статей портала по теме;
+// нет поля — своя тема или текст (так же и у путешествий, сохранённых раньше)
+export type JourneyOrigin = "portal";
 
 // Утверждение из присланного текста, которое расходится с общепринятыми сведениями
 export type SourceDoubt = {
@@ -38,6 +49,7 @@ export type Journey = {
   version: 1;
   title: string;
   createdAt: string;
+  origin?: JourneyOrigin;
   doubts: SourceDoubt[];
   checkpoints: Checkpoint[];
   // Только при разработке: путешествие собрано из сохранённых ответов модели
@@ -58,6 +70,7 @@ export type PublicCheckpoint = Omit<Checkpoint, "exercises"> & {
 
 export type PublicJourney = {
   title: string;
+  origin?: JourneyOrigin;
   doubts: SourceDoubt[];
   checkpoints: PublicCheckpoint[];
 };

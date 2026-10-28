@@ -6,6 +6,7 @@ import { BookOpen, Sparkles, TriangleAlert, Zap } from "lucide-react";
 import { plural } from "@/lib/plural";
 import { checkpointSeconds, formatTime } from "@/lib/journey/timing";
 import type { PublicJourney } from "@/lib/journey/types";
+import { aiNote, CheckpointSources, isPortalJourney, PortalLabel } from "./CheckpointSources";
 import { JourneyCheckpoint } from "./JourneyCheckpoint";
 import { GROW_TEXT } from "./JourneyCompanion";
 import { JourneyReport } from "./JourneyReport";
@@ -102,11 +103,19 @@ function JourneyHeader({ journey }: { journey: PublicJourney }) {
             Мои путешествия
           </Link>
         </div>
-        <h1 className="text-3xl font-semibold">{journey.title}</h1>
+        <h1 className="text-3xl font-semibold">
+          {journey.title}
+          {isPortalJourney(journey) && (
+            <>
+              {" "}
+              <PortalLabel />
+            </>
+          )}
+        </h1>
       </div>
       <p className="flex items-center gap-1.5 text-sm text-muted">
         <Sparkles size={16} aria-hidden="true" className="text-accent" />
-        Конспекты и вопросы составлены ИИ и могут содержать ошибки.
+        {aiNote(journey)}
       </p>
     </div>
   );
@@ -203,6 +212,7 @@ function JourneyStudy({ journey, dispatch }: { journey: PublicJourney; dispatch:
               <span className="text-accent">{index + 1}.</span> {checkpoint.title}
             </h3>
             <p className="leading-relaxed">{checkpoint.summary}</p>
+            <CheckpointSources checkpoint={checkpoint} />
           </li>
         ))}
       </ol>

@@ -3,9 +3,18 @@ import type { z } from "zod";
 import { generateStructured, type ModelFailure, type ModelResult } from "@/lib/llm/client";
 import { buildCheckpoint, buildDoubts, checkPlan } from "./build";
 import { layoutJourney } from "./layout";
-import { EXERCISES_SYSTEM, PLAN_SYSTEM, exercisesPrompt, planPrompt, retryNote } from "./prompts";
-import { checkpointExercisesSchema, planSchema } from "./schemas";
-import type { Journey } from "./types";
+import { checkPortalPlan, type PortalMaterial } from "./portal";
+import {
+  EXERCISES_SYSTEM,
+  PLAN_SYSTEM,
+  PORTAL_PLAN_SYSTEM,
+  exercisesPrompt,
+  planPrompt,
+  portalPlanPrompt,
+  retryNote,
+} from "./prompts";
+import { checkpointExercisesSchema, planSchema, portalPlanSchema, type Plan } from "./schemas";
+import type { CheckpointSource, Journey } from "./types";
 
 // Генерация путешествия: план (шаг 1), затем упражнения всех чекпоинтов
 // параллельно (шаг 2). Между шагами сервер раскладывает типы упражнений
@@ -82,9 +91,68 @@ function describeStep(step: ModelStep): string {
   return step.kind === "plan" ? "план" : `чекпоинт ${step.number}`;
 }
 
+// Проверенный план; sources — источники чекпоинтов по порядку (только по материалам портала)
+export type PlannedJourney = { plan: Plan; sources: CheckpointSource[][] | null };
+
+export type PlanResult =
+  | { ok: true; value: PlannedJourney }
+  | { ok: false; reason: ModelFailure }
+  | { ok: false; reason: "unsuitable"; message: string };
+
+// Шаг 1 — план. source — своя тема или текст, PortalMaterial — разделы статей портала по теме:
+// у такого плана свой промпт и схема с номерами фрагментов, а номера проверяет сервер
+// (checkPortalPlan). Отдельно от упражнений — для замера плана (scripts/journey-eval.ts)
+export async function planJourney(
+  source: string | PortalMaterial,
+  ask: AskModel = askModel,
+  abortSignal?: AbortSignal,
+): Promise<PlanResult> {
+  const request = { timeoutMs: PLAN_TIMEOUT_MS, maxOutputTokens: PLAN_MAX_OUTPUT_TOKENS, abortSignal };
+  const plan =
+    typeof source === "string"
+      ? await runStep(
+          ask,
+          { kind: "plan" },
+          { ...request, schema: planSchema, system: PLAN_SYSTEM, prompt: planPrompt(source) },
+          (value): { ok: true; value: PlannedJourney } | { ok: false; error: string } => {
+            // Неподходящий материал — не ошибка модели, повторять не нужно
+            if (!value.suitable) return { ok: true, value: { plan: value, sources: null } };
+            const error = checkPlan(value);
+            return error ? { ok: false, error } : { ok: true, value: { plan: value, sources: null } };
+          },
+        )
+      : await runStep(
+          ask,
+          { kind: "plan" },
+          {
+            ...request,
+            schema: portalPlanSchema,
+            system: PORTAL_PLAN_SYSTEM,
+            prompt: portalPlanPrompt(source.topic, source.fragments),
+          },
+          (value): { ok: true; value: PlannedJourney } | { ok: false; error: string } => {
+            if (!value.suitable) return { ok: true, value: { plan: { ...value, doubts: [] }, sources: null } };
+            const checked = checkPortalPlan(value, source);
+            if (!checked.ok) return checked;
+            const error = checkPlan(checked.value.plan);
+            return error ? { ok: false, error } : { ok: true, value: checked.value };
+          },
+        );
+  if (!plan.ok) return plan;
+  if (!plan.value.plan.suitable) {
+    const message = plan.value.plan.problem.trim().slice(0, 300);
+    return {
+      ok: false,
+      reason: "unsuitable",
+      message: message || "По этому материалу не получается составить путешествие.",
+    };
+  }
+  return plan;
+}
+
 // signal — отмена извне: посетитель закрыл страницу, не дождавшись путешествия
 export async function generateJourney(
-  source: string,
+  source: string | PortalMaterial,
   ask: AskModel = askModel,
   signal?: AbortSignal,
 ): Promise<GenerateResult> {
@@ -93,49 +161,25 @@ export async function generateJourney(
   const controller = new AbortController();
   const abortSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
 
-  const plan = await runStep(
-    ask,
-    { kind: "plan" },
-    {
-      schema: planSchema,
-      system: PLAN_SYSTEM,
-      prompt: planPrompt(source),
-      timeoutMs: PLAN_TIMEOUT_MS,
-      maxOutputTokens: PLAN_MAX_OUTPUT_TOKENS,
-      abortSignal,
-    },
-    (value) => {
-      // Неподходящий материал — не ошибка модели, повторять не нужно
-      if (!value.suitable) return { ok: true, value };
-      const error = checkPlan(value);
-      return error ? { ok: false, error } : { ok: true, value };
-    },
-  );
-  if (!plan.ok) return plan;
-  if (!plan.value.suitable) {
-    const message = plan.value.problem.trim().slice(0, 300);
-    return {
-      ok: false,
-      reason: "unsuitable",
-      message: message || "По этому материалу не получается составить путешествие.",
-    };
-  }
+  const planned = await planJourney(source, ask, abortSignal);
+  if (!planned.ok) return planned;
+  const { plan, sources } = planned.value;
 
   // Типы упражнений по чекпоинтам раскладывает сервер по отметкам плана
-  const layouts = layoutJourney(plan.value.checkpoints);
+  const layouts = layoutJourney(plan.checkpoints);
 
   // Причина первого окончательного сбоя: остальные чекпоинты после него
   // отменяются и «падают» уже из-за отмены
   let failure: ModelFailure | null = null;
   const steps = await Promise.all(
-    plan.value.checkpoints.map(async (planned, index) => {
+    plan.checkpoints.map(async (planned, index) => {
       const step = await runStep(
         ask,
         { kind: "checkpoint", number: index + 1 },
         {
           schema: checkpointExercisesSchema,
           system: EXERCISES_SYSTEM,
-          prompt: exercisesPrompt(plan.value, planned, layouts[index], index + 1),
+          prompt: exercisesPrompt(plan, planned, layouts[index], index + 1),
           timeoutMs: EXERCISES_TIMEOUT_MS,
           maxOutputTokens: EXERCISES_MAX_OUTPUT_TOKENS,
           abortSignal,
@@ -160,10 +204,13 @@ export async function generateJourney(
     ok: true,
     journey: {
       version: 1,
-      title: plan.value.title.trim(),
+      title: plan.title.trim(),
       createdAt: new Date().toISOString(),
-      doubts: buildDoubts(plan.value),
-      checkpoints: steps.flatMap((step) => (step.ok ? [step.value] : [])),
+      ...(sources && { origin: "portal" as const }),
+      doubts: buildDoubts(plan),
+      checkpoints: steps.flatMap((step, index) =>
+        step.ok ? [sources ? { ...step.value, sources: sources[index] } : step.value] : [],
+      ),
     },
   };
 }

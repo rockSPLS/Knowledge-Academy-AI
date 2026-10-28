@@ -70,6 +70,19 @@ export const planSchema = z.object({
 export type Plan = z.infer<typeof planSchema>;
 export type PlanCheckpoint = Plan["checkpoints"][number];
 
+// ---------- Шаг 1 по материалам портала ----------
+// Тот же план, но у чекпоинта — номера фрагментов, на которых он построен (их проверяет
+// сервер, lib/journey/portal.ts), а сомнительных утверждений нет: материал — статьи портала
+
+export const portalPlanSchema = z.object({
+  suitable: planSchema.shape.suitable,
+  problem: planSchema.shape.problem,
+  title: planSchema.shape.title,
+  checkpoints: z.array(planSchema.shape.checkpoints.element.extend({ sources: z.array(z.number()) })),
+});
+
+export type PortalPlan = z.infer<typeof portalPlanSchema>;
+
 // ---------- Шаг 2: упражнения одного чекпоинта ----------
 // Модель пишет только содержание. id, порядок показа и перемешивание задаёт build.ts.
 // В списке — упражнения заданных типов и последним запасное (тип тоже задан);

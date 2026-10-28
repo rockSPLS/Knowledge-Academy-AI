@@ -9,6 +9,7 @@ import type { CheckResult } from "@/lib/exercises/types";
 import type { PublicCheckpoint } from "@/lib/journey/types";
 import { AnswerRecord, typeLabel } from "./AnswerRecord";
 import { checkJourneyAnswer, fetchHint, fetchSkipExplanation } from "./api";
+import { CheckpointSources } from "./CheckpointSources";
 import { CheckpointTimer } from "./CheckpointTimer";
 import {
   computeGamification,
@@ -391,6 +392,7 @@ function CheckpointSummary({
       <details open={progress.mode === "quiz"} className="rounded-lg bg-background p-3 text-sm">
         <summary className="cursor-pointer font-medium">Конспект: {checkpoint.title}</summary>
         <p className="mt-2 leading-relaxed">{checkpoint.summary}</p>
+        <CheckpointSources checkpoint={checkpoint} />
       </details>
 
       {next ? (

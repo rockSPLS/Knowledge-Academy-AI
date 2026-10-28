@@ -32,6 +32,26 @@ export function judgeFailureResponse(reason: ModelFailure): Response {
   );
 }
 
+// Путешествие по материалам портала: по теме ничего не нашлось (модель не вызывалась)
+// или искать нечем — нет модели эмбеддингов, сервис не ответил
+export function portalFailureResponse(reason: "not-in-materials" | "unavailable"): Response {
+  return reason === "not-in-materials"
+    ? Response.json(
+        {
+          code: "not-in-materials",
+          error: "В материалах портала об этом нет. Попробуйте другую тему или постройте путешествие по своей теме.",
+        },
+        { status: 422 },
+      )
+    : Response.json(
+        {
+          code: "portal-unavailable",
+          error: "Путешествие по материалам портала сейчас недоступно. Можно построить путешествие по своей теме.",
+        },
+        { status: 503 },
+      );
+}
+
 export function rateLimitedResponse(retryAfterSec: number): Response {
   const minutes = Math.ceil(retryAfterSec / 60);
   return Response.json(

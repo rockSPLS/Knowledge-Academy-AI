@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useSavedJourneys } from "@/components/progress/hooks";
 import { JourneyApp } from "./JourneyApp";
 import { JourneyForm } from "./JourneyForm";
+import type { PortalTopicOption } from "./portalTopics";
 import { journeyHref, SavedJourneys } from "./SavedJourneys";
 import { MAX_SAVED_JOURNEYS, newJourneyId, saveJourney } from "./saved";
 import { journeyReducer } from "./state";
@@ -14,13 +15,14 @@ import { journeyReducer } from "./state";
 // сохраняется сразу, как только создано, и открывается по своему адресу: ссылка
 // из источника поиска ведёт на него же.
 
-export function JourneyPage() {
+// topics — темы статей с понятными названиями для кнопок «Стоит повторить» в форме
+export function JourneyPage({ topics }: { topics: PortalTopicOption[] }) {
   const id = useSearchParams().get("id");
   // key — другое путешествие открывается с чистым состоянием
-  return id ? <JourneyApp key={id} journeyId={id} /> : <JourneyHome />;
+  return id ? <JourneyApp key={id} journeyId={id} /> : <JourneyHome topics={topics} />;
 }
 
-function JourneyHome() {
+function JourneyHome({ topics }: { topics: PortalTopicOption[] }) {
   const router = useRouter();
   const journeys = useSavedJourneys();
   const [saveError, setSaveError] = useState(false);
@@ -34,8 +36,9 @@ function JourneyHome() {
       <div className="space-y-6">
         <h1 className="text-3xl font-semibold">Путешествие по знаниям</h1>
         <p className="text-lg text-muted">
-          Введите тему или вставьте текст — ИИ составит маршрут из нескольких чекпоинтов. В каждом —
-          короткий конспект одного понятия и упражнения на время: от простого к сложному.
+          Выберите тему из материалов портала, введите свою или вставьте текст — ИИ составит маршрут
+          из нескольких чекпоинтов. В каждом — короткий конспект одного понятия и упражнения на время:
+          от простого к сложному.
         </p>
       </div>
       <SavedJourneys journeys={journeys} onRemovedLast={() => formHeadingRef.current?.focus()} />
@@ -60,6 +63,7 @@ function JourneyHome() {
             </p>
           )}
           <JourneyForm
+            topics={topics}
             onCreated={(generated) => {
               const id = newJourneyId();
               const progress = journeyReducer(undefined, { type: "create", ...generated });

@@ -5,6 +5,7 @@ import { AlarmClockCheck, CircleCheck, Download, ExternalLink, Flag, Target } fr
 import { plural } from "@/lib/plural";
 import { formatTime } from "@/lib/journey/timing";
 import { AnswerRecord } from "./AnswerRecord";
+import { CheckpointSources } from "./CheckpointSources";
 import { computeGamification, isFullyCorrect, type Achievements } from "./gamification";
 import { pointsText } from "./JourneyCompanion";
 import { downloadReport, openReport } from "./reportExport";
@@ -206,11 +207,13 @@ export function ReportContent({
                 <details className="rounded-lg bg-surface p-3 text-sm print:hidden">
                   <summary className="cursor-pointer font-medium">Конспект</summary>
                   <p className="mt-2 leading-relaxed">{checkpoint.summary}</p>
+                  <CheckpointSources checkpoint={checkpoint} />
                 </details>
               )}
               <div className={standalone ? "text-sm" : "hidden text-sm print:block"}>
                 <p className="font-medium">Конспект</p>
                 <p className="mt-1 leading-relaxed">{checkpoint.summary}</p>
+                <CheckpointSources checkpoint={checkpoint} absolute={standalone} />
               </div>
               {checkpoint.exercises.map(({ exercise }, n) => {
                 const outcome = progress.outcomes[exercise.id];

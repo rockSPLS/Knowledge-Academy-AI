@@ -93,8 +93,9 @@ export function hasMistakes(progress: ProgressInput): boolean {
 }
 
 // Темы статей, которые стоит повторить: сначала — в порядке последних ошибок сводки
-// (от новых к старым), затем остальные в порядке курса
-function reviewArticleTopics(progress: ProgressInput): ArticleTopic[] {
+// (от новых к старым), затем остальные в порядке курса. Ими же пользуется путешествие
+// по материалам портала (lib/journey/portal.ts)
+export function reviewArticleTopics(progress: ProgressInput): ArticleTopic[] {
   const results = latestResults(progress);
   const review = getAllTopics().filter(
     (topic) => topicStatus(topic.exerciseIds.map((id) => results.get(id) ?? null)) === "review",

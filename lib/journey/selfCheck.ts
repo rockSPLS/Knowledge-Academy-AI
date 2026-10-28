@@ -2,10 +2,11 @@ import "server-only";
 import { z } from "zod";
 import { FREE_ANSWER_KINDS, type FreeAnswerKind } from "@/lib/exercises/types";
 import { CHECKPOINTS_MAX, CHECKPOINTS_MIN, checkPlan } from "./build";
-import { fixtures, replayModel, type Fixture } from "./fixtures";
+import { fixtures, fixtureSource, replayModel, type Fixture } from "./fixtures";
 import { generateJourney } from "./generate";
 import { calibrationIndex, checkLayout, hasMisconception, layoutJourney, type CheckpointLayout } from "./layout";
-import { BASIC_TYPES, checkpointExercisesSchema, planSchema, type BasicType, type GeneratedType, type Plan, type PlanCheckpoint } from "./schemas";
+import { checkPortalPlan, MAX_REVIEW_FRAGMENTS, portalMaterialFromIds, reviewNumbers, type PortalMaterial } from "./portal";
+import { BASIC_TYPES, checkpointExercisesSchema, planSchema, type BasicType, type GeneratedType, type Plan, type PlanCheckpoint, type PortalPlan } from "./schemas";
 
 // Самопроверка генерации без запросов к модели — только при разработке
 // (POST /api/journey/dev { selfCheck: true }):
@@ -32,6 +33,8 @@ export async function runJourneySelfCheck(): Promise<SelfCheckReport> {
   checkSchema(expect);
   await checkFixtures(expect);
   await checkSpare(expect);
+  await checkPortalNumbers(expect);
+  checkPortalMaterialAndFacts(expect);
   return report;
 }
 
@@ -257,6 +260,12 @@ const EXPECTED_TYPES: Record<string, GeneratedType[][]> = {
     ["true-false", "multiple-choice"],
     ["order-steps", "free-answer"],
   ],
+  "portal-hallucinations": [
+    ["true-false", "multiple-choice"],
+    ["calibration", "multiple-choice"],
+    ["match-pairs", "true-false"],
+    ["order-steps", "free-answer"],
+  ],
   vaccines: [
     ["multiple-choice", "fill-blank"],
     ["calibration", "free-answer"],
@@ -270,7 +279,7 @@ const sorted = (types: string[]) => [...types].sort().join(",");
 
 async function checkFixtures(expect: Expect) {
   for (const [name, fixture] of Object.entries(fixtures)) {
-    const result = await generateJourney(fixture.source, replayModel(fixture));
+    const result = await generateJourney(fixtureSource(fixture), replayModel(fixture));
     expect(result.ok, `пример ${name} не собрался: ${JSON.stringify(result)}`);
     if (!result.ok) continue;
     const types = result.journey.checkpoints.map((checkpoint) =>
@@ -371,5 +380,123 @@ async function checkSpare(expect: Expect) {
     (await typesOf(photosynthesisWith(2, [{ exercises: [calibration, mc, broken(freeAnswer)] }]), 2)) ===
       sorted(["calibration", "multiple-choice"]),
     "свободный ответ не заменён запасным",
+  );
+}
+
+// ---------- Номера фрагментов в плане по материалам портала ----------
+// Подставные ответы — сохранённый план portal-hallucinations с чужими номерами: номер, которого
+// не было среди фрагментов, не становится источником; чекпоинт без годного номера и раздел
+// «стоит повторить» без своего чекпоинта — ошибка плана, и план повторяется
+
+async function checkPortalNumbers(expect: Expect) {
+  const fixture = fixtures["portal-hallucinations"];
+  const material = fixture ? fixtureSource(fixture) : null;
+  if (!fixture || typeof material === "string" || material === null) {
+    expect(false, "нет сохранённых ответов portal-hallucinations по материалам портала");
+    return;
+  }
+  const good = fixture.plan.at(-1) as PortalPlan;
+  const clone = () => structuredClone(good);
+  const base = checkPortalPlan(good, material);
+  expect(base.ok, `сохранённый план portal-hallucinations не прошёл проверку: ${base.ok ? "" : base.error}`);
+  if (!base.ok) return;
+
+  const foreign = clone();
+  foreign.checkpoints[0].sources = [0, 42, -1, 5.5, ...good.checkpoints[0].sources];
+  const cleaned = checkPortalPlan(foreign, material);
+  expect(
+    cleaned.ok && JSON.stringify(cleaned.value.sources) === JSON.stringify(base.value.sources),
+    "чужие номера фрагментов не должны становиться источниками",
+  );
+
+  const none = clone();
+  none.checkpoints.forEach((checkpoint) => (checkpoint.sources = [0, 99]));
+  expect(!checkPortalPlan(none, material).ok, "чекпоинт без годного номера должен быть ошибкой плана");
+
+  const review = reviewNumbers(material);
+  expect(review.length > 0, "в сохранённом материале нет раздела «стоит повторить»");
+  // Раздел «стоит повторить» стоит в источниках своего чекпоинта вторым — код ставит его первым
+  const own = good.checkpoints.findIndex((checkpoint) => review.includes(checkpoint.sources[0]));
+  const other = review[0] === 1 ? 2 : 1;
+  const second = clone();
+  second.checkpoints[own].sources = [other, ...good.checkpoints[own].sources];
+  const reordered = checkPortalPlan(second, material);
+  expect(
+    reordered.ok && reordered.value.sources[own][0].href === material.fragments[review[0] - 1].href,
+    "раздел «стоит повторить» вторым источником должен становиться первым",
+  );
+  // Раздела «стоит повторить» нет ни в одном чекпоинте — ошибка плана
+  const noOwn = clone();
+  noOwn.checkpoints.forEach((checkpoint) => {
+    const rest = checkpoint.sources.filter((n) => !review.includes(n));
+    checkpoint.sources = rest.length > 0 ? rest : [other];
+  });
+  expect(!checkPortalPlan(noOwn, material).ok, "раздел «стоит повторить» без своего чекпоинта должен быть ошибкой плана");
+
+  // Первая попытка — только чужие номера, повтор — годный план: путешествие собирается,
+  // и все его источники — разделы из материала
+  const result = await generateJourney(material, replayModel({ ...fixture, plan: [none, good] }));
+  const hrefs = new Set(material.fragments.map((fragment) => fragment.href));
+  expect(
+    result.ok &&
+      result.journey.origin === "portal" &&
+      result.journey.checkpoints.every(
+        (checkpoint) => (checkpoint.sources?.length ?? 0) > 0 && checkpoint.sources!.every((source) => hrefs.has(source.href)),
+      ),
+    "после повтора путешествие по материалам портала должно собраться с источниками из материала",
+  );
+}
+
+// ---------- Материал и факты плана по материалам портала ----------
+// Разделов «стоит повторить» с пометкой — не больше MAX_REVIEW_FRAGMENTS, от последних ошибок:
+// при шести и больше у каждого не нашлось бы своего чекпоинта. Ключевой факт по-английски
+// отбрасывается, а видимый текст (конспект) код не трогает, даже с латинской буквой в слове
+
+function checkPortalMaterialAndFacts(expect: Expect) {
+  const ids = [
+    "hallucinations#chto-takoe-gallyutsinatsiya",
+    "hallucinations#pochemu-oni-voznikayut",
+    "hallucinations#priznaki-na-kotorye-stoit-obratit-vnimanie",
+    "hallucinations#kak-proveryat",
+    "prompt-structure#iz-chego-sostoit-khoroshiy-prompt",
+    "prompt-structure#tipichnye-oshibki",
+    "prompt-structure#chek-list-pered-otpravkoy",
+    "how-llm-works#kak-rozhdaetsya-otvet",
+  ];
+  // Шесть тем стоит повторить; последняя ошибка — у последнего упражнения списка
+  const wrong = [
+    "hallucinations-definition",
+    "hallucinations-cause",
+    "hallucinations-red-flags",
+    "hallucinations-check-source",
+    "prompt-parts-pairs",
+    "prompt-tips-true-false",
+  ];
+  const progress = {
+    exercises: wrong.map((id) => ({ id, verdict: "incorrect" as const })),
+    mistakes: [...wrong].reverse().map((id) => ({ id, verdict: "incorrect" as const })),
+    journeyConcepts: [],
+    masteredConcepts: [],
+  };
+  const material = portalMaterialFromIds("тема", ids.map((id) => `section:${id}`), progress);
+  const marked = material.fragments.filter((fragment) => fragment.review).map((fragment) => fragment.id);
+  expect(
+    marked.length === MAX_REVIEW_FRAGMENTS &&
+      ["tipichnye-oshibki", "iz-chego-sostoit", "kak-proveryat"].every((part) => marked.some((id) => id.includes(part))),
+    `разделов с пометкой «стоит повторить» должно быть ${MAX_REVIEW_FRAGMENTS}, от последних ошибок: ${marked.join(", ")}`,
+  );
+
+  const fixture = fixtures["portal-hallucinations"];
+  if (!fixture?.portal) return;
+  const good = structuredClone(fixture.plan.at(-1) as PortalPlan);
+  const facts = good.checkpoints[0].keyFacts;
+  good.checkpoints[0].keyFacts = [...facts, "The model predicts the most likely continuation of text."];
+  good.checkpoints[0].summary = `Hаллюцинация. ${good.checkpoints[0].summary}`;
+  const checked = checkPortalPlan(good, fixtureSource(fixture) as PortalMaterial);
+  expect(
+    checked.ok &&
+      checked.value.plan.checkpoints[0].keyFacts.length === facts.length &&
+      checked.value.plan.checkpoints[0].summary === good.checkpoints[0].summary,
+    "ключевой факт по-английски должен отбрасываться, а конспект — оставаться как есть",
   );
 }

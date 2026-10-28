@@ -1,11 +1,14 @@
 import "server-only";
 import { normalizeText } from "@/lib/exercises/text";
+import { parseSearchContext } from "@/lib/search/request";
 import type { AskModel } from "./generate";
+import { portalMaterialFromIds, type PortalMaterial } from "./portal";
 import type { AskJudge } from "./judge";
 import type { Journey } from "./types";
 import dough from "./fixtures/dough.json";
 import inflation from "./fixtures/inflation.json";
 import photosynthesis from "./fixtures/photosynthesis.json";
+import portalHallucinations from "./fixtures/portal-hallucinations.json";
 import vaccines from "./fixtures/vaccines.json";
 
 // Сохранённые ответы модели: разработка и проверки без лишних запросов.
@@ -28,10 +31,21 @@ export type JudgeFixture = {
 export type Fixture = {
   description: string;
   source: string;
+  // Путешествие по материалам портала: тема, сводка прогресса и id найденных фрагментов
+  // (section:<slug>#<якорь>) по порядку номеров. Материал собирается заново из индекса
+  // (portalMaterialFromIds), без сервиса эмбеддингов; source тогда — та же тема
+  portal?: { topic: string; progress?: unknown; fragments: string[] };
   plan: unknown[];
   checkpoints: unknown[][];
   judge?: JudgeFixture[];
 };
+
+// Материал сохранённых ответов: тема или текст — или разделы портала с пометками по сводке
+export function fixtureSource(fixture: Fixture): string | PortalMaterial {
+  if (!fixture.portal) return fixture.source;
+  const { progress } = parseSearchContext({ progress: fixture.portal.progress }, "journey-fixture");
+  return portalMaterialFromIds(fixture.portal.topic, fixture.portal.fragments, progress);
+}
 
 // photosynthesis — пример, составленный вручную; первая попытка упражнений
 // второго чекпоинта в нём намеренно ошибочна (проверка повтора), а в первом
@@ -43,6 +57,7 @@ export const fixtures: Record<string, Fixture> = {
   inflation,
   dough,
   vaccines,
+  "portal-hallucinations": portalHallucinations,
 };
 
 // «Модель», которая отвечает сохранёнными ответами по порядку попыток

@@ -3,6 +3,7 @@
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { Printer } from "lucide-react";
+import { aiNote, isPortalJourney, PortalLabel } from "./CheckpointSources";
 import { ReportContent } from "./JourneyReport";
 import type { JourneyProgress } from "./state";
 
@@ -45,8 +46,16 @@ function ReportDocument({ progress }: { progress: JourneyProgress }) {
             Печать / PDF
           </button>
         </div>
-        <h1 className="text-3xl font-semibold">{progress.journey.title}</h1>
-        <p className="text-sm text-muted">Конспекты и вопросы составлены ИИ и могут содержать ошибки.</p>
+        <h1 className="text-3xl font-semibold">
+          {progress.journey.title}
+          {isPortalJourney(progress.journey) && (
+            <>
+              {" "}
+              <PortalLabel />
+            </>
+          )}
+        </h1>
+        <p className="text-sm text-muted">{aiNote(progress.journey)}</p>
       </div>
       <ReportContent progress={progress} standalone />
     </main>

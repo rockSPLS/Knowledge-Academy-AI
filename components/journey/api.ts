@@ -1,5 +1,8 @@
+import { loadProgressData } from "@/components/progress/store";
+import { buildProgressSummary, isEmptySummary } from "@/components/progress/summary";
 import type { CheckResult } from "@/lib/exercises/types";
 import type { PublicJourney } from "@/lib/journey/types";
+import { loadSavedJourneys } from "./saved";
 
 // Запросы страницы путешествия к серверу. Ошибка сервера превращается в JourneyApiError
 // с текстом, который можно показать пользователю (поле error ответа API).
@@ -49,6 +52,13 @@ export type GeneratedJourney = { journey: PublicJourney; sealed: string };
 
 export function generateJourney(source: string, signal: AbortSignal): Promise<GeneratedJourney> {
   return postJson("/api/journey", { source }, signal);
+}
+
+// Путешествие по материалам портала: тема и та же сводка прогресса, что у поиска, — по ней
+// сервер находит темы статей, которые стоит повторить. Путешествия не отправляются
+export function generatePortalJourney(topic: string, signal: AbortSignal): Promise<GeneratedJourney> {
+  const summary = buildProgressSummary(loadProgressData(), loadSavedJourneys());
+  return postJson("/api/journey", { topic, ...(!isEmptySummary(summary) && { progress: summary }) }, signal);
 }
 
 // Только при разработке: путешествие из сохранённых ответов модели, без запросов к ней

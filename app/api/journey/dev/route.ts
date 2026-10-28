@@ -8,12 +8,14 @@ import {
 } from "@/lib/exercises/limits";
 import {
   fixtures,
+  fixtureSource,
   recordingJudge,
   recordingModel,
   replayModel,
   type Fixture,
 } from "@/lib/journey/fixtures";
 import { askModel, generateJourney, type AskModel } from "@/lib/journey/generate";
+import type { PortalMaterial } from "@/lib/journey/portal";
 import { askJudge, judgeAnswer, judgeCalibration } from "@/lib/journey/judge";
 import { toPublicJourney } from "@/lib/journey/public";
 import { sealJourney, unsealJourney } from "@/lib/journey/seal";
@@ -30,8 +32,9 @@ import { modelFailureResponse, rateLimitedResponse } from "@/lib/llm/responses";
 //   из сохранённого путешествия (подбор промпта оценщика); ответы модели возвращаются
 //   в поле recording в формате сохранённых оценок (поле judge в lib/journey/fixtures/);
 // - { judge: { fixture, exerciseId, answers: [{ text, confident }] } } — то же для калибровки;
-// - { responses: { description, source, plan, checkpoints } } — то же по ответам из запроса
-//   (проверка отдельных случаев: ошибка в ответе, повтор, отказ);
+// - { responses: { description, source, portal?, plan, checkpoints } } — то же по ответам из запроса
+//   (проверка отдельных случаев: ошибка в ответе, повтор, отказ, чужие номера фрагментов);
+//   с portal — путешествие по материалам портала из сохранённых id фрагментов (lib/journey/fixtures.ts);
 // - { source, record: true } — настоящая генерация; ответы модели возвращаются
 //   в поле recording в формате сохранённых ответов (lib/journey/fixtures/);
 // - { unseal: "v1...." } — расшифровка зашифрованного путешествия (null — подделано или повреждено);
@@ -45,6 +48,7 @@ export const maxDuration = 300;
 const fixtureSchema = z.object({
   description: z.string(),
   source: z.string(),
+  portal: z.object({ topic: z.string(), progress: z.unknown(), fragments: z.array(z.string()) }).optional(),
   plan: z.array(z.unknown()),
   checkpoints: z.array(z.array(z.unknown())),
 });
@@ -91,16 +95,16 @@ export async function POST(request: Request) {
   if ("selfCheck" in parsed.data) return Response.json(await runJourneySelfCheck());
   if ("judge" in parsed.data) return judgeWithModel(request, parsed.data.judge);
 
-  let source: string;
+  let source: string | PortalMaterial;
   let ask: AskModel;
   let recording: Pick<Fixture, "plan" | "checkpoints"> | undefined;
   if ("fixture" in parsed.data) {
     const fixture = fixtures[parsed.data.fixture];
     if (!fixture) return Response.json({ error: "Нет таких сохранённых ответов" }, { status: 404 });
-    source = fixture.source;
+    source = fixtureSource(fixture);
     ask = replayModel(fixture);
   } else if ("responses" in parsed.data) {
-    source = parsed.data.responses.source;
+    source = fixtureSource(parsed.data.responses);
     ask = replayModel(parsed.data.responses);
   } else {
     // Настоящие запросы к модели — под тем же лимитом, что и обычная генерация
@@ -151,7 +155,7 @@ async function judgeWithModel(
   const { fixture: name, exerciseId } = judge;
   const fixture = fixtures[name];
   if (!fixture) return Response.json({ error: "Нет таких сохранённых ответов" }, { status: 404 });
-  const built = await generateJourney(fixture.source, replayModel(fixture));
+  const built = await generateJourney(fixtureSource(fixture), replayModel(fixture));
   if (!built.ok) return Response.json({ error: "Сохранённые ответы не собрались" }, { status: 500 });
   const exercise = built.journey.checkpoints
     .flatMap((checkpoint) => checkpoint.exercises)

@@ -7,6 +7,7 @@ import type { Journey, PublicJourney } from "./types";
 export function toPublicJourney(journey: Journey): PublicJourney {
   return {
     title: journey.title,
+    ...(journey.origin && { origin: journey.origin }),
     doubts: journey.doubts,
     checkpoints: journey.checkpoints.map((checkpoint) => ({
       id: checkpoint.id,
@@ -18,6 +19,7 @@ export function toPublicJourney(journey: Journey): PublicJourney {
         exercise: toPublicExercise(exercise),
         difficulty,
       })),
+      ...(checkpoint.sources && { sources: checkpoint.sources }),
     })),
   };
 }
