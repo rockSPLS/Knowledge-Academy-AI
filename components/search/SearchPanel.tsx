@@ -46,17 +46,27 @@ export function SearchPanel() {
     if (!window.matchMedia(WIDE_QUERY).matches) close(false);
   }
 
+  // Панель выезжает справа (около четверти секунды, страница сужается в том же темпе —
+  // SearchProvider.tsx), закрытая — за краем окна и скрыта (invisible), поэтому недоступна
+  // клавиатуре и экранному диктору. При открытии visibility не плавная (её нет в transition):
+  // панель видна с первого кадра, и фокус встаёт в поле вопроса. При закрытии — плавная:
+  // панель остаётся видимой, пока уезжает, и скрывается в конце.
+  // «Уменьшить движение»: без сдвига, панель проявляется.
+  const motion = isOpen
+    ? "visible translate-x-0 opacity-100 transition-[translate,opacity]"
+    : "invisible translate-x-full transition-[translate,opacity,visibility] motion-reduce:translate-x-0 motion-reduce:opacity-0";
+
   return (
     <aside
       id="search-panel"
       aria-labelledby={headingId}
-      hidden={!isOpen}
       onKeyDown={(event) => {
         if (event.key === "Escape") close();
       }}
-      className="fixed inset-0 z-50 flex flex-col bg-background print:hidden lg:inset-y-0 lg:right-0 lg:left-auto lg:z-30 lg:w-[22rem] lg:border-l lg:border-border xl:w-[26rem]"
+      className={`fixed inset-0 z-50 flex flex-col bg-background duration-250 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:duration-120 print:hidden lg:inset-y-0 lg:right-0 lg:left-auto lg:z-30 lg:w-[22rem] lg:border-l lg:border-border xl:w-[26rem] ${motion}`}
     >
-      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+      {/* На широком экране — 61 px вместе с линией, как шапка сайта (SiteHeader.tsx): линии совпадают */}
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 lg:h-[61px] lg:py-0">
         <h2 id={headingId} className="font-semibold">
           Поиск по материалам
         </h2>

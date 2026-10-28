@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { ScrollLink } from "@/components/layout/ScrollLink";
-import { LoaderCircle, TriangleAlert } from "lucide-react";
+import { ChevronDown, LoaderCircle, TriangleAlert } from "lucide-react";
 import { useHydrated, useProgressData, useSavedJourneys } from "@/components/progress/hooks";
 import { buildProgressSummary, isEmptySummary } from "@/components/progress/summary";
 import { KIND_TAG } from "@/components/search/SearchPanel";
@@ -11,7 +11,16 @@ import { plural } from "@/lib/plural";
 import type { ArticleTopics } from "@/lib/progress/types";
 import type { Review, ReviewFailure, ReviewResponse, ReviewSource } from "@/lib/review/types";
 import { loadFixtureReview, requestReview, ReviewApiError, type ReviewInput } from "./api";
-import { isSameSummary, reviewSnapshot, saveReview, serverReviewSnapshot, subscribeReview } from "./storage";
+import {
+  collapsedSnapshot,
+  isSameSummary,
+  reviewSnapshot,
+  saveCollapsed,
+  saveReview,
+  serverCollapsedSnapshot,
+  serverReviewSnapshot,
+  subscribeReview,
+} from "./storage";
 import { toReviewList, type ToReviewItem } from "./toReview";
 
 // Блок «Разбор ошибок» — на странице прогресса (под карточками) и в итогах теста.
@@ -23,6 +32,10 @@ import { toReviewList, type ToReviewItem } from "./toReview";
 //   и показывает, что стоит повторить, по правилу страницы прогресса (toReview.ts).
 // - Пока ждём ответа, кнопка неактивна (aria-disabled: фокус остаётся на ней); уход со страницы
 //   отменяет запрос. Готов разбор — фокус на его начало, разбора нет — на сообщение.
+// - Заголовок — кнопка, которая сворачивает и разворачивает блок (aria-expanded). Сразу после
+//   разбора блок развёрнут, свёрнутый остаётся свёрнутым до закрытия вкладки (storage.ts).
+// - Об ИИ сказано один раз: подзаголовок-приглашение — только до разбора, после — ярлык
+//   «Составлено ИИ» у вывода и внизу «Сверяйтесь с источниками.».
 // Ссылки пунктов строит сервер по проверенным номерам фрагментов, текст ИИ выводится как текст.
 
 // Только при разработке: сохранённые разборы (POST /api/review/dev) — блок можно проверять
@@ -69,9 +82,11 @@ export function ReviewBlock({
   const hydrated = useHydrated();
   const stored = useSyncExternalStore(subscribeReview, reviewSnapshot, serverReviewSnapshot);
   const saved = hydrated ? stored : null;
+  const collapsed = useSyncExternalStore(subscribeReview, collapsedSnapshot, serverCollapsedSnapshot);
   const [request, setRequest] = useState<RequestState>({ kind: "idle" });
   const controller = useRef<AbortController | null>(null);
   const headingId = useId();
+  const bodyId = useId();
   // Куда перевести фокус, когда ответ отрисован: кнопки «Разобрать» после разбора уже нет
   const pendingFocus = useRef<"result" | "message" | null>(null);
   const resultRef = useRef<HTMLDivElement>(null);
@@ -178,32 +193,50 @@ export function ReviewBlock({
   }
 
   return (
-    <section aria-labelledby={headingId} className="space-y-4 rounded-xl border border-border p-5">
+    // gap, а не space-y: у свёрнутого блока под заголовком не остаётся отступа скрытого содержимого
+    <section aria-labelledby={headingId} className="flex flex-col gap-4 rounded-xl border border-border p-5">
       <div className="space-y-1">
-        <h2 id={headingId} className="text-xl font-semibold">
-          Разбор ошибок
+        <h2 className="text-xl font-semibold">
+          <button
+            id={headingId}
+            type="button"
+            aria-expanded={!collapsed}
+            aria-controls={bodyId}
+            onClick={() => saveCollapsed(!collapsed)}
+            className="-m-1 flex w-[calc(100%+0.5rem)] items-center justify-between gap-3 rounded-md p-1 text-left transition-colors hover:text-accent"
+          >
+            Разбор ошибок
+            <ChevronDown
+              size={20}
+              aria-hidden="true"
+              className={`shrink-0 text-muted transition-transform motion-reduce:transition-none ${collapsed ? "" : "rotate-180"}`}
+            />
+          </button>
         </h2>
-        <p className="text-sm text-muted">{intro}</p>
+        {/* Приглашение — только до разбора: над готовым разбором оно повторяло бы ярлык «Составлено ИИ» */}
+        {!saved && !collapsed && <p className="text-sm text-muted">{intro}</p>}
       </div>
-      {body}
-      {IS_DEV && toReview.length > 0 && (
-        <div className="space-y-2 rounded-lg border border-dashed border-border-strong p-3 text-sm">
-          <p className="text-muted">Только при разработке: сохранённые разборы без запросов к модели</p>
-          <div className="flex flex-wrap gap-2">
-            {DEV_FIXTURES.map((fixture) => (
-              <button
-                key={fixture.id}
-                type="button"
-                aria-disabled={isLoading}
-                onClick={() => run((input, signal) => loadFixtureReview(fixture.id, input, signal))}
-                className="rounded-md border border-border-strong bg-background px-3 py-1.5 hover:bg-border aria-disabled:opacity-60"
-              >
-                {fixture.label}
-              </button>
-            ))}
+      <div id={bodyId} hidden={collapsed} className="space-y-4">
+        {body}
+        {IS_DEV && toReview.length > 0 && (
+          <div className="space-y-2 rounded-lg border border-dashed border-border-strong p-3 text-sm">
+            <p className="text-muted">Только при разработке: сохранённые разборы без запросов к модели</p>
+            <div className="flex flex-wrap gap-2">
+              {DEV_FIXTURES.map((fixture) => (
+                <button
+                  key={fixture.id}
+                  type="button"
+                  aria-disabled={isLoading}
+                  onClick={() => run((input, signal) => loadFixtureReview(fixture.id, input, signal))}
+                  className="rounded-md border border-border-strong bg-background px-3 py-1.5 hover:bg-border aria-disabled:opacity-60"
+                >
+                  {fixture.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </section>
   );
 }
@@ -269,7 +302,8 @@ function ReviewResult({
           )}
         </p>
       )}
-      <p className="text-xs text-subtle">Разбор составлен ИИ по вашим ответам и материалам портала. Сверяйтесь с источниками.</p>
+      {/* Что разбор составлен ИИ, уже говорит ярлык у вывода */}
+      <p className="text-xs text-subtle">Сверяйтесь с источниками.</p>
     </div>
   );
 }

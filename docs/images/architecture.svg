@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="328" viewBox="0 0 680 328" font-family="-apple-system, 'Segoe UI', Roboto, Arial, sans-serif" role="img">
+  <title>Как запросы к ИИ проходят через сервер</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#8b8b95" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <g fill="none" stroke="#a1a1aa" stroke-width="1" stroke-dasharray="4 3">
+    <rect x="20" y="20" width="140" height="288" rx="10"/>
+    <rect x="180" y="20" width="336" height="288" rx="10"/>
+    <rect x="526" y="20" width="148" height="288" rx="10"/>
+  </g>
+  <!-- Светлые подложки под подписями зон: серый текст читается и на тёмной теме -->
+  <g fill="#ffffff">
+    <rect x="60" y="26" width="60" height="16" rx="8"/>
+    <rect x="320" y="26" width="56" height="16" rx="8"/>
+    <rect x="564" y="26" width="72" height="16" rx="8"/>
+  </g>
+  <g font-size="12" fill="#52525b" text-anchor="middle" dominant-baseline="central">
+    <text x="90" y="34">Браузер</text>
+    <text x="348" y="34">Сервер</text>
+    <text x="600" y="34">Сервис ИИ</text>
+  </g>
+
+  <g text-anchor="middle" dominant-baseline="central">
+    <path d="M32 94V266A58 10 0 0 0 148 266V94A58 10 0 0 0 32 94Z" fill="#eef2ff" stroke="#4f46e5" stroke-width="0.8"/>
+    <path d="M32 94A58 10 0 0 0 148 94" fill="none" stroke="#4f46e5" stroke-width="0.8"/>
+    <text x="90" y="170" font-size="14" font-weight="500" fill="#3730a3">Прогресс</text>
+    <text x="90" y="190" font-size="12" fill="#4f46e5">и сохранённые</text>
+    <text x="90" y="206" font-size="12" fill="#4f46e5">путешествия</text>
+
+    <rect x="192" y="68" width="100" height="64" rx="8" fill="#fafafa" stroke="#d4d4d8" stroke-width="0.8"/>
+    <text x="242" y="90" font-size="14" font-weight="500" fill="#18181b">Поиск</text>
+    <text x="242" y="110" font-size="12" fill="#71717a">/api/search</text>
+    <rect x="298" y="68" width="100" height="64" rx="8" fill="#fafafa" stroke="#d4d4d8" stroke-width="0.8"/>
+    <text x="348" y="90" font-size="14" font-weight="500" fill="#18181b">Разбор</text>
+    <text x="348" y="110" font-size="12" fill="#71717a">/api/review</text>
+    <rect x="404" y="68" width="100" height="64" rx="8" fill="#fafafa" stroke="#d4d4d8" stroke-width="0.8"/>
+    <text x="454" y="84" font-size="14" font-weight="500" fill="#18181b">Путешествие</text>
+    <text x="454" y="101" font-size="12" fill="#18181b">по материалам</text>
+    <text x="454" y="117" font-size="12" fill="#71717a">/api/journey</text>
+
+    <path d="M192 162V198A55 6 0 0 0 302 198V162A55 6 0 0 0 192 162Z" fill="#eef2ff" stroke="#4f46e5" stroke-width="0.8"/>
+    <path d="M192 162A55 6 0 0 0 302 162" fill="none" stroke="#4f46e5" stroke-width="0.8"/>
+    <text x="247" y="177" font-size="14" font-weight="500" fill="#3730a3">Индекс</text>
+    <text x="247" y="194" font-size="12" fill="#4f46e5">материалов</text>
+
+    <rect x="322" y="158" width="182" height="44" rx="8" fill="#fafafa" stroke="#d4d4d8" stroke-width="0.8"/>
+    <text x="413" y="180" font-size="14" font-weight="500" fill="#18181b">Подбор фрагментов</text>
+
+    <rect x="192" y="228" width="240" height="48" rx="8" fill="#fafafa" stroke="#d4d4d8" stroke-width="0.8"/>
+    <text x="312" y="244" font-size="14" font-weight="500" fill="#18181b">Проверка номеров</text>
+    <text x="312" y="261" font-size="12" fill="#71717a">ссылки строит сервер</text>
+
+    <rect x="534" y="158" width="132" height="44" rx="8" fill="#4f46e5" stroke="#4338ca" stroke-width="0.8"/>
+    <text x="600" y="172" font-size="14" font-weight="500" fill="#ffffff">Модель</text>
+    <text x="600" y="189" font-size="12" fill="#eef2ff">эмбеддингов</text>
+    <rect x="534" y="228" width="132" height="48" rx="8" fill="#4f46e5" stroke="#4338ca" stroke-width="0.8"/>
+    <text x="600" y="244" font-size="14" font-weight="500" fill="#ffffff">Модель ответов</text>
+    <text x="600" y="261" font-size="12" fill="#eef2ff">ответ с номерами</text>
+  </g>
+
+  <g fill="none" stroke="#8b8b95" stroke-width="1.2">
+    <!-- Браузер → все три маршрута -->
+    <path d="M150 110H168V50H454"/>
+    <line x1="242" y1="50" x2="242" y2="65" marker-end="url(#arrow)"/>
+    <line x1="348" y1="50" x2="348" y2="65" marker-end="url(#arrow)"/>
+    <line x1="454" y1="50" x2="454" y2="65" marker-end="url(#arrow)"/>
+    <!-- Маршруты → подбор фрагментов -->
+    <path d="M242 132V144M348 132V144M454 132V144M242 144H454"/>
+    <line x1="413" y1="144" x2="413" y2="155" marker-end="url(#arrow)"/>
+    <line x1="302" y1="180" x2="319" y2="180" marker-end="url(#arrow)"/>
+    <line x1="507" y1="180" x2="531" y2="180" stroke-dasharray="5 3" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+    <path d="M480 202V252H531" marker-end="url(#arrow)"/>
+    <path d="M600 276V294H312V279" marker-end="url(#arrow)"/>
+    <line x1="192" y1="252" x2="151" y2="252" marker-end="url(#arrow)"/>
+  </g>
+</svg>

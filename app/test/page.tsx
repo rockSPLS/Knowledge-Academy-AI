@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Exercise } from "@/components/exercises/Exercise";
+import { BackToArticles } from "@/components/layout/BackToArticles";
 import { TestProvider } from "@/components/test/TestContext";
 import {
   TestFinish,
@@ -22,6 +23,7 @@ export default function TestPage() {
 
   return (
     <div className="space-y-6">
+      <BackToArticles />
       <h1 className="text-3xl font-semibold">Итоговый тест</h1>
       <p className="text-lg text-muted">
         Вопросы по всем темам курса. Ответьте на все и нажмите «Завершить тест» внизу — тогда

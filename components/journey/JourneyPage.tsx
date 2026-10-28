@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { BackToArticles } from "@/components/layout/BackToArticles";
 import { useSavedJourneys } from "@/components/progress/hooks";
 import { JourneyApp } from "./JourneyApp";
 import { JourneyForm } from "./JourneyForm";
@@ -34,6 +35,7 @@ function JourneyHome({ topics }: { topics: PortalTopicOption[] }) {
   return (
     <div className="space-y-8">
       <div className="space-y-6">
+        <BackToArticles />
         <h1 className="text-3xl font-semibold">Путешествие по знаниям</h1>
         <p className="text-lg text-muted">
           Выберите тему из материалов портала, введите свою или вставьте текст — ИИ составит маршрут

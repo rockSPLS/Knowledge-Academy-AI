@@ -3,6 +3,7 @@
 import { useEffect, useReducer, useRef } from "react";
 import Link from "next/link";
 import { BookOpen, Sparkles, TriangleAlert, Zap } from "lucide-react";
+import { BackToArticles } from "@/components/layout/BackToArticles";
 import { plural } from "@/lib/plural";
 import { checkpointSeconds, formatTime } from "@/lib/journey/timing";
 import type { PublicJourney } from "@/lib/journey/types";
@@ -54,6 +55,7 @@ export function JourneyApp({ journeyId }: { journeyId: string }) {
   if (state === null) {
     return (
       <div className="space-y-4">
+        <BackToArticles />
         <h1 className="text-3xl font-semibold">Путешествие не найдено</h1>
         <p className="text-muted">
           Его удалили, или оно сохранено в другом браузере: путешествия хранятся только в том браузере,
@@ -69,6 +71,7 @@ export function JourneyApp({ journeyId }: { journeyId: string }) {
   const { stage } = state;
   return (
     <div className="space-y-6">
+      <BackToArticles />
       <JourneyHeader journey={state.journey} />
       {stage.kind === "start" && <JourneyStart progress={state} dispatch={dispatch} />}
       {stage.kind === "study" && <JourneyStudy journey={state.journey} dispatch={dispatch} />}

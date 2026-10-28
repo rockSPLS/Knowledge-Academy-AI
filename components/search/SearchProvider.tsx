@@ -15,6 +15,8 @@ import { SearchPanel } from "./SearchPanel";
 // и кликается, а содержимое страницы сдвигается влево на ширину панели.
 // Узкий экран: панель на весь экран поверх страницы, страница под ней не прокручивается
 // и недоступна клавиатуре и экранному диктору (inert).
+// Панель выезжает справа, а страница сужается в том же темпе (250 мс); при «уменьшить
+// движение» панель проявляется, а ширина меняется сразу.
 //
 // Пока панель открыта, у обёртки страницы стоит data-search-open: вариант Tailwind
 // search-open (globals.css) убирает из-под панели то, что закреплено у правого края окна.
@@ -159,11 +161,12 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
   return (
     <SearchContext.Provider value={value}>
       {/* Пока панель открыта на широком экране, страница сужается на её ширину
-          и не уходит под панель. При печати панели нет — и отступа тоже */}
+          и не уходит под панель — в том же темпе, что выезжает панель (SearchPanel.tsx);
+          при «уменьшить движение» ширина меняется сразу. При печати панели нет — и отступа тоже */}
       <div
         ref={pageRef}
         data-search-open={isOpen ? "" : undefined}
-        className={`flex flex-1 flex-col ${isOpen ? "lg:pr-[22rem] xl:pr-[26rem] print:pr-0" : ""}`}
+        className={`flex flex-1 flex-col transition-[padding] duration-250 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none ${isOpen ? "lg:pr-[22rem] xl:pr-[26rem] print:pr-0" : ""}`}
       >
         {children}
       </div>

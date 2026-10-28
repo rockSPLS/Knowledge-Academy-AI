@@ -6,8 +6,11 @@ import type { Review } from "@/lib/review/types";
 // а если сводка с тех пор изменилась (новые ответы), рядом с разбором — «Разобрать заново».
 // Разбор один на вкладку: его видят и страница прогресса, и итоги теста. Неудачный разбор
 // не хранится; удаление всего прогресса удаляет и разбор (ProgressApp.tsx).
+// Рядом — отметка «блок свёрнут»: свёрнутый блок остаётся свёрнутым до закрытия вкладки,
+// а новый разбор и удаление прогресса его разворачивают.
 
 const STORAGE_KEY = "progress-review";
+const COLLAPSED_KEY = "progress-review-collapsed";
 // Событие для этой же вкладки: блоки перерисовываются, когда разбор записан или удалён
 const CHANGE_EVENT = "progress-review-change";
 
@@ -42,9 +45,16 @@ function isSavedReview(value: unknown): value is SavedReview {
   );
 }
 
+// Свёрнут ли блок. Если хранилище недоступно, отметка живёт в памяти страницы:
+// блок всё равно сворачивается, только после перезагрузки снова развёрнут
+let memoryCollapsed = false;
+
 export function saveReview(saved: SavedReview): void {
+  memoryCollapsed = false;
   try {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+    // Сразу после разбора блок развёрнут
+    sessionStorage.removeItem(COLLAPSED_KEY);
   } catch {
     // Не сохранилось — после перезагрузки разбора просто не будет
   }
@@ -52,12 +62,37 @@ export function saveReview(saved: SavedReview): void {
 }
 
 export function clearSavedReview(): void {
+  memoryCollapsed = false;
   try {
     sessionStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(COLLAPSED_KEY);
   } catch {
     // Хранилище недоступно — удалять нечего
   }
   window.dispatchEvent(new Event(CHANGE_EVENT));
+}
+
+export function saveCollapsed(collapsed: boolean): void {
+  memoryCollapsed = collapsed;
+  try {
+    if (collapsed) sessionStorage.setItem(COLLAPSED_KEY, "1");
+    else sessionStorage.removeItem(COLLAPSED_KEY);
+  } catch {
+    // Остаётся отметка в памяти
+  }
+  window.dispatchEvent(new Event(CHANGE_EVENT));
+}
+
+export function collapsedSnapshot(): boolean {
+  try {
+    return sessionStorage.getItem(COLLAPSED_KEY) === "1";
+  } catch {
+    return memoryCollapsed;
+  }
+}
+
+export function serverCollapsedSnapshot(): boolean {
+  return false;
 }
 
 // Сводка та же — разбор составлен по текущим ответам

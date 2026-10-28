@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import { BackToArticles } from "@/components/layout/BackToArticles";
 import { ArticleTimer } from "@/components/progress/ArticleTimer";
 import { articles, getArticle, getNextArticle } from "@/lib/articles";
 
@@ -35,13 +36,7 @@ export default async function ArticlePage({ params }: PageProps<"/articles/[slug
     <article>
       {/* Время на статье — в прогресс: пока вкладка видна, с паузой без действий */}
       <ArticleTimer slug={slug} />
-      <Link
-        href="/"
-        className="inline-flex items-center gap-1 text-sm text-muted hover:text-foreground"
-      >
-        <ArrowLeft size={16} aria-hidden="true" />
-        Все статьи
-      </Link>
+      <BackToArticles />
       <h1 className="mt-6 text-3xl font-semibold">{article.title}</h1>
       <ArticleContent />
 

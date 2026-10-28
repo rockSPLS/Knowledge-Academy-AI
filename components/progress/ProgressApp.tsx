@@ -5,6 +5,7 @@ import Link from "next/link";
 import { journeyResult, type JourneyResult } from "@/components/journey/results";
 import { journeyHref, journeyStatusText } from "@/components/journey/SavedJourneys";
 import { clearSavedJourneys, type SavedJourney } from "@/components/journey/saved";
+import { BackToArticles } from "@/components/layout/BackToArticles";
 import { ReviewBlock } from "@/components/review/ReviewBlock";
 import { clearSavedReview } from "@/components/review/storage";
 import { STORAGE_KEY as SEARCH_STORAGE_KEY } from "@/components/search/SearchProvider";
@@ -43,11 +44,14 @@ export function ProgressApp({ articles }: { articles: ArticleTopics }) {
 
   return (
     <div className="space-y-10">
-      <div className="space-y-2">
-        <h1 ref={headingRef} tabIndex={-1} className="text-3xl font-semibold outline-none">
-          Мой прогресс
-        </h1>
-        <p className="text-muted">Хранится только в этом браузере.</p>
+      <div>
+        <BackToArticles />
+        <div className="mt-6 space-y-2">
+          <h1 ref={headingRef} tabIndex={-1} className="text-3xl font-semibold outline-none">
+            Мой прогресс
+          </h1>
+          <p className="text-muted">Хранится только в этом браузере.</p>
+        </div>
       </div>
 
       {isEmpty ? (

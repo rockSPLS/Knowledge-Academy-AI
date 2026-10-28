@@ -5,21 +5,24 @@ import { NavLink } from "./NavLink";
 import { ThemeToggle } from "./ThemeToggle";
 
 // Шапка сайта. Слева знак и название, справа — место для действий на любой странице:
-// кнопка-лупа поиска, «Пройти тест», «Прогресс», «Путешествие» и переключатель темы.
-// «Путешествие» — главное действие — последней из ссылок, рядом с переключателем темы.
+// переключатель темы, «Пройти тест», «Прогресс», «Путешествие» и кнопка-лупа поиска.
+// «Путешествие» — главное действие — последней из ссылок. Лупа — у правого края шапки,
+// ближе всего к панели поиска, которая открывается справа.
 // Название сайта рядом со знаком — мелко в три строки, по высоте не больше знака: в одну
 // строку оно вместе с пятью кнопками в колонку сайта (768 px) не помещается.
 // На телефоне (до sm, 640 px) знак и пять кнопок в одну строку не помещаются: шапка
-// в две строки — сверху знак с названием, лупа и тема, снизу ссылки («Пройти тест»
+// в две строки — сверху знак с названием, тема и лупа, снизу ссылки («Пройти тест»
 // сокращается до «Тест»). Ссылки обёрнуты в свою группу только на телефоне: с sm группа
 // «растворяется» (contents), и порядок в строке задают классы order.
+// С sm высота шапки — ровно 61 px вместе с нижней линией: заголовок панели поиска
+// (SearchPanel.tsx) той же высоты, и их нижние линии продолжают друг друга.
 
 const LINK = "whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors sm:px-3";
 
 export function SiteHeader() {
   return (
     <header className="border-b border-border print:hidden">
-      <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-x-1 gap-y-2 px-4 py-3 sm:flex-nowrap sm:gap-2">
+      <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-x-1 gap-y-2 px-4 py-3 sm:h-[60px] sm:flex-nowrap sm:gap-2 sm:py-0">
         <Link href="/" className="order-1 mr-auto inline-flex items-center gap-2 font-semibold hover:text-accent">
           {/* На телефоне знак чуть меньше (30 px), на 320 px он не сжимается */}
           <LogoMark size={36} className="h-[30px] w-[90px] shrink-0 sm:h-9 sm:w-[108px]" />
@@ -31,7 +34,7 @@ export function SiteHeader() {
           </span>
         </Link>
         <div className="order-2">
-          <SearchToggle />
+          <ThemeToggle />
         </div>
         <div className="order-4 flex w-full gap-1 sm:contents">
           <NavLink href="/test" className={`${LINK} border border-border-strong hover:bg-surface sm:order-3`}>
@@ -49,7 +52,7 @@ export function SiteHeader() {
           </NavLink>
         </div>
         <div className="order-3 sm:order-6">
-          <ThemeToggle />
+          <SearchToggle />
         </div>
       </div>
     </header>
