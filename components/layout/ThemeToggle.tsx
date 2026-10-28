@@ -78,7 +78,7 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label={label}
       title={label}
-      className="rounded-md p-2 text-muted transition-colors hover:bg-surface hover:text-foreground"
+      className="rounded-md p-1.5 sm:p-2 text-muted transition-colors hover:bg-surface hover:text-foreground"
     >
       {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
     </button>

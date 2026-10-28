@@ -1,11 +1,20 @@
 import type { MDXComponents } from "mdx/types";
 import { Exercise } from "@/components/exercises/Exercise";
+import { headingId, textOf } from "@/lib/search/anchors";
 
 // Оформление текста всех MDX-статей и компоненты, доступные внутри них.
 // Цвета — только через дизайн-токены (app/globals.css), чтобы работали обе темы.
 
 const components = {
-  h2: (props) => <h2 className="mt-12 mb-3 text-2xl font-semibold" {...props} />,
+  // id раздела — для ссылок-источников поиска (/articles/<slug>#<id>).
+  // scroll-mt: при переходе по ссылке заголовок не прижимается к самому краю окна
+  h2: (props) => (
+    <h2
+      id={headingId(textOf(props.children))}
+      className="mt-12 mb-3 scroll-mt-6 text-2xl font-semibold"
+      {...props}
+    />
+  ),
   h3: (props) => <h3 className="mt-8 mb-2 text-xl font-semibold" {...props} />,
   p: (props) => <p className="my-4 leading-7" {...props} />,
   ul: (props) => <ul className="my-4 list-disc space-y-2 pl-6 marker:text-subtle" {...props} />,

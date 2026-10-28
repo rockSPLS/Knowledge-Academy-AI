@@ -35,10 +35,12 @@ export function MiniSakura({ game }: { game: Gamification }) {
   return <Sakura leaves={game.leaves} started={game.startedCheckpoints} bloom={false} className="w-full" />;
 }
 
-// Колонка справа: только на широком экране — по бокам основной колонки сайта там есть место
+// Колонка справа: только на широком экране — по бокам основной колонки сайта там есть место.
+// Пока открыта панель поиска, места нет: колонка прячется, а маленькая сакура и счёт
+// показываются в полосе времени и итогах чекпоинта, как на узком экране (вариант search-open)
 export function CompanionAside({ game }: { game: Gamification }) {
   return (
-    <aside aria-label="Прогресс" className="absolute inset-y-0 left-full ml-8 hidden w-44 xl:block">
+    <aside aria-label="Прогресс" className="absolute inset-y-0 left-full ml-8 hidden w-44 xl:block xl:search-open:hidden">
       <div className="sticky top-4 space-y-2 rounded-xl border border-border bg-surface p-3 text-center text-sm text-muted tabular-nums">
         <p className="font-medium text-foreground">Дерево знаний</p>
         <Sakura leaves={game.leaves} started={game.startedCheckpoints} bloom={false} className="w-full" />

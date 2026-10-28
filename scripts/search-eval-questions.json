@@ -1,0 +1,76 @@
+{
+  "description": "Набор для замера качества поиска (npm run search:eval). Вопросы сформулированы своими словами, а не словами заголовков. expected — раздел статьи (slug#якорь), который должен попасть в первую тройку; если ответ честно лежит в двух разделах, указаны оба. group: tune — вопросы, на которых подбирались настройки, holdout — отложенные, при подборе не смотрели. offTopic — вопросы не о материалах портала: по ним подбирается порог близости, ниже которого фрагмент не считается найденным.",
+  "questions": [
+    {
+      "group": "tune",
+      "question": "Почему чат-бот на один и тот же вопрос каждый раз отвечает немного по-другому?",
+      "expected": ["how-llm-works#kak-rozhdaetsya-otvet"]
+    },
+    {
+      "group": "tune",
+      "question": "Откуда модель знает, что слово «лук» здесь про овощ, а не про оружие?",
+      "expected": ["how-llm-works#vnimanie-kak-model-ponimaet-kontekst"]
+    },
+    {
+      "group": "tune",
+      "question": "Помнит ли нейросеть наш вчерашний разговор?",
+      "expected": ["how-llm-works#chego-u-modeli-net"]
+    },
+    {
+      "group": "tune",
+      "question": "Почему нейросеть иногда придумывает книги и статьи, которых нет?",
+      "expected": ["hallucinations#pochemu-oni-voznikayut"]
+    },
+    {
+      "group": "tune",
+      "question": "Как убедиться, что цитата из ответа модели настоящая?",
+      "expected": ["hallucinations#kak-proveryat"]
+    },
+    {
+      "group": "tune",
+      "question": "Что написать в запросе, чтобы модель меньше выдумывала?",
+      "expected": ["hallucinations#kak-snizit-risk"]
+    },
+    {
+      "group": "tune",
+      "question": "Можно ли отправить в чат-бот договор с паспортными данными клиента?",
+      "expected": ["ai-safety#1-chto-vy-otdaete-konfidentsialnost"]
+    },
+    {
+      "group": "tune",
+      "question": "Что делать, если в письме, которое читает ассистент, спрятана команда для него?",
+      "expected": ["ai-safety#ataki-na-modeli-inektsiya-prompta"]
+    },
+    {
+      "group": "tune",
+      "question": "Мне позвонили голосом начальника и просят срочно перевести деньги — как быть?",
+      "expected": ["ai-safety#ii-v-rukakh-moshennikov"]
+    },
+    {
+      "group": "holdout",
+      "question": "Как объяснить модели, для кого я пишу текст и какого он должен быть объёма?",
+      "expected": ["prompt-structure#iz-chego-sostoit-khoroshiy-prompt"]
+    },
+    {
+      "group": "holdout",
+      "question": "Почему лучше просить «пиши просто», а не «не пиши сложно»?",
+      "expected": ["prompt-structure#priemy-kotorye-rabotayut"]
+    },
+    {
+      "group": "holdout",
+      "question": "Как модель становится вежливым помощником, а не просто дописывает текст?",
+      "expected": ["how-llm-works#iz-prodolzhatelya-teksta-v-pomoshchnika"]
+    },
+    {
+      "group": "holdout",
+      "question": "Можно ли сразу запускать программу, которую написал ИИ?",
+      "expected": ["ai-safety#3-chto-vy-delaete-s-rezultatom-otvetstvennost"]
+    },
+    {
+      "group": "holdout",
+      "question": "В каких областях ответам модели особенно опасно доверять без проверки?",
+      "expected": ["hallucinations#gde-risk-vyshe-vsego", "ai-safety#2-chemu-vy-verite-dostovernost"]
+    }
+  ],
+  "offTopic": ["Как приготовить борщ на четверых?", "Какая погода будет завтра в горах?"]
+}

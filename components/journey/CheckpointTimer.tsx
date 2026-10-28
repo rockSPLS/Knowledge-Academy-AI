@@ -72,7 +72,7 @@ export function CheckpointTimer({
 
   return (
     <div className="sticky top-0 z-10 flex items-center gap-3 bg-background py-3">
-      {companion && <div className="w-11 shrink-0 xl:hidden">{companion}</div>}
+      {companion && <div className="w-11 shrink-0 xl:hidden xl:search-open:block">{companion}</div>}
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex items-center justify-between gap-4 text-sm text-muted">
           <span>{label}</span>
@@ -82,7 +82,7 @@ export function CheckpointTimer({
             {formatTime(remaining)}
           </span>
         </div>
-        {score && <div className="text-sm text-muted tabular-nums xl:hidden">{score}</div>}
+        {score && <div className="text-sm text-muted tabular-nums xl:hidden xl:search-open:block">{score}</div>}
         <div className="h-2 overflow-hidden rounded-full bg-border" aria-hidden="true">
           <div
             className={`h-full transition-[width] duration-300 ${color} ${pulse}`}

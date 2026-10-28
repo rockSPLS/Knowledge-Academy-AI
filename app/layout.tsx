@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
+import { SearchProvider } from "@/components/search/SearchProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -43,9 +44,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="flex min-h-full flex-col">
-        <SiteHeader />
-        <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">{children}</main>
-        <SiteFooter />
+        {/* Панель поиска — в общем макете: она и ответ остаются открытыми при переходе между страницами */}
+        <SearchProvider>
+          <SiteHeader />
+          <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">{children}</main>
+          <SiteFooter />
+        </SearchProvider>
       </body>
     </html>
   );

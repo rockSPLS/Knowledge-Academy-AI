@@ -6,6 +6,8 @@ import {
   RATE_LIMIT_GLOBAL_WINDOW_MS,
   RATE_LIMIT_PER_IP,
   RATE_LIMIT_PER_IP_WINDOW_MS,
+  SEARCH_LIMIT_GLOBAL,
+  SEARCH_LIMIT_PER_IP,
 } from "./limits";
 
 // «Мягкий» лимит частоты запросов к модели: счётчики в памяти сервера.
@@ -48,7 +50,7 @@ function createRateLimiter(limit: number, windowMs: number) {
   };
 }
 
-// Два независимых лимита: генерация путешествия и оценка свободных ответов.
+// Независимые лимиты: генерация путешествия, оценка свободных ответов и поиск по материалам.
 // У каждого — счётчик по IP и общий на экземпляр; окна одинаковые
 function createModelLimit(perIpLimit: number, globalLimit: number) {
   const perIp = createRateLimiter(perIpLimit, RATE_LIMIT_PER_IP_WINDOW_MS);
@@ -122,3 +124,6 @@ export const consumeModelRequest = createModelLimit(RATE_LIMIT_PER_IP, RATE_LIMI
 
 // Учитывает оценку свободного ответа моделью (раскрытие по сохранённой оценке не считается)
 export const consumeEvaluationRequest = createModelLimit(EVALUATION_LIMIT_PER_IP, EVALUATION_LIMIT_GLOBAL);
+
+// Учитывает вопрос поиска по материалам: эмбеддинг вопроса и ответ модели — один запрос к лимиту
+export const consumeSearchRequest = createModelLimit(SEARCH_LIMIT_PER_IP, SEARCH_LIMIT_GLOBAL);

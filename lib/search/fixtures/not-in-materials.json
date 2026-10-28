@@ -1,0 +1,17 @@
+{
+  "description": "Настоящий ответ модели: вопрос о материалах в целом, но ответа на него в статьях нет. Поиск нашёл близкие фрагменты, модель поставила inMaterials = false, честно сказала, что в материалах этого нет, и назвала близкие фрагменты со ссылками.",
+  "question": "Какую модель лучше выбрать для перевода текстов с английского?",
+  "mode": "semantic-and-words",
+  "chunkIds": [
+    "section:prompt-structure#iz-chego-sostoit-khoroshiy-prompt",
+    "exercise:llm-generation-blanks",
+    "exercise:hallucinations-check-source",
+    "section:how-llm-works#kak-model-uchitsya",
+    "section:ai-safety#itog-tsikla"
+  ],
+  "answer": {
+    "inMaterials": false,
+    "answer": "В предоставленных материалах нет информации о том, какую именно модель выбрать для перевода текстов с английского. Фрагменты объясняют общую структуру промптов [1] и принцип обучения языковых моделей предсказанием слов [4].",
+    "sources": [1, 4]
+  }
+}

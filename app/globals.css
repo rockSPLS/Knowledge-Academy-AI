@@ -4,6 +4,10 @@
    (переключатель в шапке), а не системной темой */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
+/* Вариант search-open: пока открыта панель поиска (data-search-open на обёртке
+   страницы, components/search/SearchProvider.tsx) */
+@custom-variant search-open (&:where([data-search-open] *));
+
 /* Дизайн-токены: все цвета сайта задаются здесь, компоненты ссылаются
    на них через утилиты Tailwind (bg-surface, text-muted, bg-accent-fill...).
    Светлая тема — по умолчанию. */

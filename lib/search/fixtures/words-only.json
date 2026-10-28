@@ -1,0 +1,13 @@
+{
+  "description": "Поиск без модели: не задана модель эмбеддингов или ключ, поэтому фрагменты найдены только по словам, а модель недоступна — ответа ИИ нет, панель показывает пояснение и фрагменты. Составлен вручную по настоящему поиску по словам.",
+  "question": "Как распознать галлюцинацию?",
+  "mode": "words",
+  "chunkIds": [
+    "exercise:hallucinations-definition",
+    "section:hallucinations#chto-takoe-gallyutsinatsiya",
+    "section:hallucinations",
+    "section:hallucinations#glavnoe",
+    "section:hallucinations#chto-dalshe"
+  ],
+  "answer": "unavailable"
+}

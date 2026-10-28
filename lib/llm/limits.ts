@@ -27,3 +27,14 @@ export const RATE_LIMIT_GLOBAL_WINDOW_MS = 60 * 60 * 1000;
 const EVALUATIONS_PER_JOURNEY = 5;
 export const EVALUATION_LIMIT_PER_IP = RATE_LIMIT_PER_IP * EVALUATIONS_PER_JOURNEY;
 export const EVALUATION_LIMIT_GLOBAL = RATE_LIMIT_GLOBAL * EVALUATIONS_PER_JOURNEY;
+
+// Поиск по материалам: максимальная длина вопроса, символов. Вопрос — одна-две фразы;
+// длинный текст поиск не улучшает, а запрос к модели делает дороже
+export const MAX_QUESTION_LENGTH = 300;
+export const MAX_SEARCH_REQUEST_BYTES = MAX_QUESTION_LENGTH * 6 + 1024;
+
+// Лимит поиска — свой счётчик, отдельно от генерации и оценки. Один поиск — это эмбеддинг
+// вопроса и короткий ответ модели. 20 вопросов за 10 минут хватает, чтобы пройти
+// по нескольким темам и переспросить; общий лимит — как у оценки
+export const SEARCH_LIMIT_PER_IP = 20;
+export const SEARCH_LIMIT_GLOBAL = EVALUATION_LIMIT_GLOBAL;

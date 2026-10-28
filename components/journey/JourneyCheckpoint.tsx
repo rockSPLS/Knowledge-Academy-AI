@@ -360,7 +360,7 @@ function CheckpointSummary({
       {/* Сакура с фразой: на телефоне — в строку (фраза справа от дерева), чтобы под деревом
           не оставался узкий столбик текста; от sm — колонкой слева от счёта */}
       <div className="flex flex-wrap items-start gap-4">
-        <div className="flex w-full items-center gap-3 sm:w-36 sm:shrink-0 sm:flex-col sm:items-stretch sm:gap-1 xl:hidden">
+        <div className="flex w-full items-center gap-3 sm:w-36 sm:shrink-0 sm:flex-col sm:items-stretch sm:gap-1 xl:hidden xl:search-open:flex">
           <div className="w-28 shrink-0 sm:w-full">{sakura}</div>
           <p className="text-xs leading-relaxed text-muted">{GROW_TEXT}</p>
         </div>

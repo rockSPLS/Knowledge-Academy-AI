@@ -181,7 +181,8 @@ export function TestScrollButtons() {
   const downLabel = isFinished ? "Вниз, к итогам теста" : "Вниз, к кнопке «Завершить тест»";
 
   return (
-    <div className="fixed right-4 bottom-4 z-20 flex flex-col gap-2">
+    // Открытая панель поиска стоит у правого края окна — кнопки сдвигаются левее неё
+    <div className="fixed right-4 bottom-4 z-20 flex flex-col gap-2 lg:search-open:right-[23rem] xl:search-open:right-[27rem]">
       {!isNearTop && (
         <button type="button" onClick={toTop} aria-label="Наверх, к началу теста" title="Наверх, к началу теста" className={SCROLL_BUTTON}>
           <ChevronUp size={22} aria-hidden="true" />
