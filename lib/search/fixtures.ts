@@ -5,8 +5,11 @@ import { answerSchema, type AnswerOutput, type AskAnswer, type Found, type Fragm
 import indexFile from "./search-index.json";
 import type { JourneySearchInput, SearchIndexFile, SearchMode } from "./types";
 import hallucination from "./fixtures/hallucination.json";
+import knownPhotosynthesis from "./fixtures/known-photosynthesis.json";
+import myMistakes from "./fixtures/my-mistakes.json";
 import notInMaterials from "./fixtures/not-in-materials.json";
 import nothingFound from "./fixtures/nothing-found.json";
+import whatToReview from "./fixtures/what-to-review.json";
 import wordsOnly from "./fixtures/words-only.json";
 
 // Сохранённые ответы поиска: интерфейс разрабатывается и проверяется без запросов
@@ -31,6 +34,9 @@ export const searchFixtures: Record<string, SearchFixture> = {
   "not-in-materials": notInMaterials as SearchFixture,
   "words-only": wordsOnly as SearchFixture,
   "nothing-found": nothingFound as SearchFixture,
+  "what-to-review": whatToReview as SearchFixture,
+  "known-photosynthesis": knownPhotosynthesis as SearchFixture,
+  "my-mistakes": myMistakes as SearchFixture,
 };
 
 const index = indexFile as SearchIndexFile;

@@ -44,3 +44,10 @@ export const MAX_SEARCH_REQUEST_BYTES = 400_000;
 // по нескольким темам и переспросить; общий лимит — как у оценки
 export const SEARCH_LIMIT_PER_IP = 20;
 export const SEARCH_LIMIT_GLOBAL = EVALUATION_LIMIT_GLOBAL;
+
+// Лимит разбора ошибок — свой счётчик. Разбор просят после теста или нескольких упражнений,
+// а не на каждый вопрос: 10 разборов за 10 минут хватает с запасом. Один разбор — один запрос
+// к модели и не больше одного к сервису эмбеддингов; общий лимит — как у поиска.
+// Размер запроса — как у поиска: та же сводка и (меньше) путешествий (lib/review/)
+export const REVIEW_LIMIT_PER_IP = 10;
+export const REVIEW_LIMIT_GLOBAL = SEARCH_LIMIT_GLOBAL;

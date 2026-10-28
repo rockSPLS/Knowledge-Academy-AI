@@ -114,9 +114,13 @@ export type ProgressSummary = {
   exercises: { id: string; verdict: Verdict }[];
   // Последние ошибки (неверно или частично), от новых к старым, по одной на упражнение
   mistakes: SummaryAnswer[];
-  // Понятия путешествий, которые стоит повторить, от новых путешествий к старым
-  journeyConcepts: { journey: string; concept: string }[];
+  // Понятия путешествий, которые стоит повторить, от новых путешествий к старым.
+  // journeyId — чтобы разбор ошибок сослался на то путешествие, где ошибка
+  journeyConcepts: SummaryConcept[];
   // Понятия путешествий, которые усвоены, — тоже от новых к старым: без них на «что я знаю
   // про …» после путешествия без ошибок модели было бы нечего сказать
-  masteredConcepts: { journey: string; concept: string }[];
+  masteredConcepts: SummaryConcept[];
 };
+
+// Понятие путешествия в сводке: id и название путешествия, понятие — название чекпоинта
+export type SummaryConcept = { journeyId: string; journey: string; concept: string };

@@ -43,7 +43,8 @@ const exerciseResultSchema = z.object({ id, verdict: z.enum(["correct", "partial
 // при описании ответа словами (progress.ts), здесь — только размер
 const mistakeSchema = exerciseResultSchema.extend({ answer: z.record(z.string().max(20), z.unknown()).optional() });
 const summaryText = z.string().max(MAX_SUMMARY_TEXT);
-const journeyConceptSchema = z.object({ journey: summaryText, concept: summaryText });
+// id путешествия нужен разбору ошибок (ссылка на путешествие); поиску — нет, поэтому необязателен
+const journeyConceptSchema = z.object({ journeyId: id.optional(), journey: summaryText, concept: summaryText });
 
 // Сводка прогресса после проверки (форма — как ProgressSummary, ответы ещё не разобраны по типам)
 export type ProgressInput = {
@@ -63,8 +64,9 @@ export function parseQuestion(body: unknown): string | null {
 
 export type SearchContextInput = { journeys: JourneySearchInput[]; progress?: ProgressInput };
 
-// Путешествия и сводка из тела запроса — только записи, которые подошли
-export function parseSearchContext(body: unknown): SearchContextInput {
+// Путешествия и сводка из тела запроса — только записи, которые подошли.
+// label — чей это запрос, для лога: тем же разбором пользуется и разбор ошибок
+export function parseSearchContext(body: unknown, label = "search"): SearchContextInput {
   const { journeys, progress } = isRecord(body) ? body : {};
   const dropped: string[] = [];
   const result: SearchContextInput = {
@@ -92,12 +94,12 @@ export function parseSearchContext(body: unknown): SearchContextInput {
   } else if (progress !== undefined) {
     dropped.push("сводка прогресса");
   }
-  if (dropped.length > 0) console.warn(`[search] пропущены данные из браузера, которые не подошли: ${dropped.join(", ")}`);
+  if (dropped.length > 0) console.warn(`[${label}] пропущены данные из браузера, которые не подошли: ${dropped.join(", ")}`);
   return result;
 }
 
 // Записи списка, которые подошли под схему, — не больше max; сколько пропущено, пишется в dropped
-function validItems<T>(schema: z.ZodType<T>, value: unknown, max: number, name: string, dropped: string[]): T[] {
+export function validItems<T>(schema: z.ZodType<T>, value: unknown, max: number, name: string, dropped: string[]): T[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) {
     dropped.push(`${name} — не список`);

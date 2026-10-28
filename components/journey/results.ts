@@ -34,7 +34,7 @@ export type JourneyResult = {
 // Итог упражнения для правила «усвоено / стоит повторить». Калибровка, где все ответы
 // верны, — верна, даже если в части вы сомневались (как «Верно N из M» в итогах).
 // Ответ, который ИИ не смог оценить, — не ошибка: такого упражнения в теме как будто нет
-function outcomeVerdict(outcome: ExerciseOutcome): Verdict | "unrated" {
+export function outcomeVerdict(outcome: ExerciseOutcome): Verdict | "unrated" {
   if (outcome.unrated && outcome.skipped) return "unrated";
   if (isFullyCorrect(outcome)) return "correct";
   return outcome.verdict === "partial" ? "partial" : "incorrect";

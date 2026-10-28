@@ -54,6 +54,7 @@ export function buildProgressSummary(data: ProgressData, journeys: SavedJourney[
   for (const journey of [...journeys].sort((a, b) => b.createdAt - a.createdAt)) {
     for (const checkpoint of journeyResult(journey.progress).checkpoints) {
       const item = {
+        journeyId: journey.id,
         journey: journey.progress.journey.title.slice(0, MAX_SUMMARY_TEXT),
         concept: String(checkpoint.concept ?? "").slice(0, MAX_SUMMARY_TEXT),
       };

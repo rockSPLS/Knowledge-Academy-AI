@@ -20,7 +20,8 @@ import { askAnswer, findChunks, searchAndAnswer } from "@/lib/search/search";
 //   и прогресс — как у обычного поиска: от них зависят ярлыки, объяснения и фрагменты
 //   путешествий;
 // - { question, journeys?, progress?, record: true } — настоящий поиск и ответ модели;
-//   ответ возвращается в поле recording в формате сохранённых ответов.
+//   ответ возвращается в поле recording в формате сохранённых ответов, в полях prompt, usage
+//   и ms — что получила модель, расход токенов и время (для проверки промпта и замеров).
 // Возвращает то же, что POST /api/search.
 
 export const maxDuration = 60;
@@ -77,12 +78,18 @@ export async function POST(request: Request) {
     chunkIds: found.chunks.map(toFixtureChunkId),
     answer: null,
   };
+  let prompt = "";
+  let usage: unknown = null;
+  const started = Date.now();
   const result = await searchAndAnswer({
     question,
     progress,
-    ask: recordingAnswer(askAnswer, recording),
+    ask: recordingAnswer(async (request) => {
+      prompt = request.prompt;
+      return askAnswer({ ...request, onUsage: (value) => (usage = value) });
+    }, recording),
     abortSignal: request.signal,
     found,
   });
-  return Response.json({ ...result, recording });
+  return Response.json({ ...result, recording, prompt, usage, ms: Date.now() - started });
 }

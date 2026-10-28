@@ -26,6 +26,9 @@ export type ChunkSource = {
 export type IndexedChunk = ChunkSource & {
   // Вектор эмбеддинга (нормирован к длине 1); null — индекс собран без модели эмбеддингов
   embedding: number[] | null;
+  // Вектор заголовка «Статья › Раздел» — только у разделов, кроме вступления: близость раздела
+  // к вопросу — наибольшая из близости текста и заголовка (search.ts)
+  headingEmbedding?: number[];
 };
 
 // Файл индекса lib/search/search-index.json

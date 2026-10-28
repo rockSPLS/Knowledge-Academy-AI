@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, TriangleAlert } from "lucide-react";
+import { ReviewBlock } from "@/components/review/ReviewBlock";
 import { plural } from "@/lib/plural";
+import type { ArticleTopics } from "@/lib/progress/types";
 import { useTestContext } from "./TestContext";
 
 // Части страницы теста, которые читают общий тестовый контекст.
@@ -243,5 +245,19 @@ export function TestSummary() {
         Пройти заново
       </button>
     </section>
+  );
+}
+
+// «Разбор ошибок» под итогами — после завершения теста. Разбор тот же, что на странице
+// прогресса: по всему прогрессу, вместе с ошибками в статьях и путешествиях
+export function TestReview({ articles }: { articles: ArticleTopics }) {
+  const { isFinished } = useRequiredTest();
+  if (!isFinished) return null;
+  return (
+    <ReviewBlock
+      articles={articles}
+      linkToProgress
+      intro="ИИ разберёт ошибки этого теста вместе с ошибками в статьях и путешествиях и скажет, что повторить."
+    />
   );
 }

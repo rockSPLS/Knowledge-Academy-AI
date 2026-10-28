@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import type { LanguageModelUsage } from "ai";
 import { generateStructured, type ModelResult } from "@/lib/llm/client";
 import { getExercise } from "@/lib/exercises/bank";
 import type { Verdict } from "@/lib/exercises/types";
@@ -9,6 +10,7 @@ import { hasProgress, latestResults, progressBlock, resultLabel } from "./progre
 import type { ProgressInput } from "./request";
 import { ANSWER_SYSTEM, answerPrompt, type PromptFragment } from "./prompts";
 import { combine, rankSemanticParts, rankWords, RESULT_COUNT } from "./rank";
+import { fitsScripts, foreignScripts } from "./scripts";
 import indexFile from "./search-index.json";
 import type {
   IndexedChunk,
@@ -32,15 +34,18 @@ import { buildWordIndex, extendWordIndex } from "./words";
 //    два списка сочетаются по рангам (rank.ts). Без настроек эмбеддингов или при ошибке
 //    сервиса — только по словам.
 // 2. Модель отвечает только по найденным фрагментам и прогрессу, со ссылками [N].
-//    Модель недоступна или ответила не по схеме — фрагменты всё равно показываются, ответа нет.
+//    Модель недоступна, ответила не по схеме или письмом, которого нет в данных, — фрагменты
+//    всё равно показываются, ответа нет.
 
 const index = indexFile as SearchIndexFile;
 const vectors = index.chunks.map((chunk) => chunk.embedding);
+const headings = index.chunks.map((chunk) => chunk.headingEmbedding);
 const wordIndex = buildWordIndex(index.chunks.map((chunk) => chunk.text));
 
-// Тайм-аут и потолок длины ответа модели: ответ короткий (2–5 предложений)
+// Тайм-аут и потолок длины ответа модели: ответ о материалах — 2–5 предложений, о самом
+// человеке — до 8; в потолок входит и рассуждение модели (около 1000 токенов на замерах)
 const ANSWER_TIMEOUT_MS = 25_000;
-const ANSWER_MAX_OUTPUT_TOKENS = 1500;
+const ANSWER_MAX_OUTPUT_TOKENS = 2500;
 // Сколько символов текста раздела показывать в источнике
 const SNIPPET_LENGTH = 180;
 
@@ -100,7 +105,7 @@ export async function findChunks(
       });
       ranked = combine(
         rankSemanticParts([
-          { vectors, query },
+          { vectors, query, headings },
           { vectors: journeyList.map((chunk) => chunk.embedding), query: shortQuery(query) },
         ]),
         byWords,
@@ -139,9 +144,11 @@ export type AskAnswer = (request: {
   system: string;
   prompt: string;
   abortSignal?: AbortSignal;
+  // Расход токенов — для замеров (app/api/search/dev)
+  onUsage?: (usage: LanguageModelUsage) => void;
 }) => Promise<ModelResult<AnswerOutput>>;
 
-export const askAnswer: AskAnswer = ({ system, prompt, abortSignal }) =>
+export const askAnswer: AskAnswer = ({ system, prompt, abortSignal, onUsage }) =>
   generateStructured({
     schema: answerSchema,
     system,
@@ -149,6 +156,7 @@ export const askAnswer: AskAnswer = ({ system, prompt, abortSignal }) =>
     timeoutMs: ANSWER_TIMEOUT_MS,
     maxOutputTokens: ANSWER_MAX_OUTPUT_TOKENS,
     abortSignal,
+    onUsage,
   });
 
 export type SearchRequest = {
@@ -178,27 +186,26 @@ export async function searchAndAnswer({
   const base = { question, mode, sources, ...(journeyVectors && { journeyVectors }) };
   if (chunks.length === 0 && !hasProgress(progress)) return { ...base, answer: null, notInMaterials: false };
 
-  const foundTopics = chunks.flatMap((chunk) => (chunk.kind === "journey" ? [] : [`${chunk.articleSlug}#${chunk.sectionId}`]));
-  const result = await ask({
+  // Тема статьи каждого фрагмента по порядку номеров — для блока «Прогресс» (progress.ts)
+  const fragmentTopics = chunks.map((chunk) => (chunk.kind === "journey" ? null : `${chunk.articleSlug}#${chunk.sectionId}`));
+  const prompt = answerPrompt(
     question,
-    chunkIds: chunks.map((chunk) => chunk.id),
-    system: ANSWER_SYSTEM,
-    prompt: answerPrompt(
-      question,
-      chunks.map((chunk) => toPromptFragment(chunk, results)),
-      progressBlock(progress, foundTopics),
-    ),
-    abortSignal,
-  });
+    chunks.map((chunk) => toPromptFragment(chunk, results)),
+    progressBlock(progress, fragmentTopics),
+  );
+  const result = await ask({ question, chunkIds: chunks.map((chunk) => chunk.id), system: ANSWER_SYSTEM, prompt, abortSignal });
   if (!result.ok) return { ...base, answer: null, notInMaterials: false };
-  const answer = checkAnswer(result.data, chunks.length);
+  // Письмо, которого нет ни в вопросе, ни во фрагментах, ни в блоке «Прогресс», — сбой ответа
+  const answer = checkAnswer(result.data, chunks.length, foreignScripts(prompt));
   return { ...base, answer, notInMaterials: answer !== null && !result.data.inMaterials };
 }
 
 // Проверка ответа модели: номера источников в тексте — только из переданных фрагментов,
 // чужие убираются. «[1, 3]» записывается как «[1][3]» — так интерфейс превращает каждый
-// номер в ссылку. Пустой ответ — как будто ответа нет
-export function checkAnswer(output: AnswerOutput, count: number): SearchAnswer | null {
+// номер в ссылку. Пустой ответ — как будто ответа нет; ответ с чужим письмом, которого нет
+// среди allowedScripts (письма данных, которые получила модель, — scripts.ts), — тоже:
+// человек видит найденные фрагменты без ответа
+export function checkAnswer(output: AnswerOutput, count: number, allowedScripts: Set<string>): SearchAnswer | null {
   const valid = (n: number) => Number.isInteger(n) && n >= 1 && n <= count;
   const text = output.answer
     // Пометка «из прогресса», которую модель иногда ставит вместо номера, — не источник
@@ -215,6 +222,10 @@ export function checkAnswer(output: AnswerOutput, count: number): SearchAnswer |
     .replace(/[ \t]{2,}/g, " ")
     .trim();
   if (!text) return null;
+  if (!fitsScripts(text, allowedScripts)) {
+    console.warn("[search] в ответе модели письмо, которого нет в данных, — ответ не показан");
+    return null;
+  }
   return { text };
 }
 
@@ -249,7 +260,15 @@ function toSource(chunk: Fragment, i: number, results: Map<string, Verdict>): Se
 }
 
 function toPromptFragment(chunk: Fragment, results: Map<string, Verdict>): PromptFragment {
-  if (chunk.kind === "journey") return { kind: "journey", path: chunk.path, text: chunk.summary };
+  if (chunk.kind === "journey") {
+    return {
+      kind: "journey",
+      journeyTitle: chunk.journeyTitle,
+      checkpoint: chunk.path[1],
+      concept: chunk.concept,
+      text: chunk.summary,
+    };
+  }
   if (chunk.kind === "section") return { kind: "section", path: chunk.path, text: sectionBody(chunk) };
   const answered = answeredExercise(chunk, results);
   return { kind: "exercise", path: chunk.path, question: chunk.question ?? "", ...(answered && { answered }) };

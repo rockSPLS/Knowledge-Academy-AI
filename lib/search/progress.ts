@@ -4,6 +4,7 @@ import type { Exercise, Verdict } from "@/lib/exercises/types";
 import { topicStatus, type TopicStatus } from "@/lib/progress/mastery";
 import { getAllTopics, getTopicOfExercise } from "@/lib/progress/topics";
 import { CHOICE_TYPES } from "@/lib/progress/types";
+import { answerMarks, quote } from "./answers";
 import type { ProgressInput } from "./request";
 
 // Прогресс в поиске. Браузер присылает вместе с вопросом короткую сводку
@@ -61,11 +62,16 @@ const VERDICT_TEXT: Record<Verdict, string> = {
   incorrect: "неверно",
 };
 
-// Блок «Прогресс» для промпта ответа. foundTopics — темы статей найденных фрагментов
-// (<slug>#<якорь>). Пустой прогресс — так и сказано, но только то, что известно серверу:
+// Блок «Прогресс» для промпта ответа. fragmentTopics — тема статьи каждого найденного
+// фрагмента по порядку номеров (<slug>#<якорь>; null — фрагмент путешествия). По ним у строки
+// ошибки сервер сам ставит номера фрагментов её раздела: модель к сведениям о прогрессе
+// ставила номера подряд, и ссылка вела на раздел о другом. Пустой прогресс — так и сказано, но только то, что известно серверу:
 // в сводку попадают только понятия с итогом «усвоено» или «стоит повторить» (до 10 каждого
 // вида): начатое путешествие без ошибок там не видно, и «не проходил путешествий» было бы неправдой
-export function progressBlock(summary: Summary | undefined, foundTopics: string[]): string {
+export function progressBlock(summary: Summary | undefined, fragmentTopics: (string | null)[]): string {
+  const foundTopics = fragmentTopics.filter((topic): topic is string => topic !== null);
+  const numbersOf = (key: string) =>
+    fragmentTopics.flatMap((topic, i) => (topic === key ? [`[${i + 1}]`] : [])).join("");
   if (!hasProgress(summary)) {
     return "Сведений о прогрессе нет: ответов на упражнения статей и теста нет, усвоенных понятий из путешествий и понятий, которые стоит повторить, тоже нет.";
   }
@@ -91,19 +97,31 @@ export function progressBlock(summary: Summary | undefined, foundTopics: string[
   lines.push(`Понятия из путешествий, которые человек усвоил: ${describe(summary!.masteredConcepts)}.`);
   lines.push(`Понятия из путешествий, которые стоит повторить: ${describe(summary!.journeyConcepts)}.`);
 
+  // Ошибки в путешествиях — пунктами того же списка, что ошибки статей: на «где я ошибался?»
+  // модель пересказывала список и пропускала понятия, названные отдельной строкой
   const mistakes = summary!.mistakes.filter((item) => getExercise(item.id));
-  if (mistakes.length > 0) {
-    lines.push("Последние ошибки в упражнениях статей и теста, от новых к старым:");
+  if (mistakes.length > 0 || summary!.journeyConcepts.length > 0) {
+    lines.push("Последние ошибки:");
+    for (const item of summary!.journeyConcepts) {
+      lines.push(`- Путешествие «${item.journey}», понятие «${item.concept}»: были ошибки в упражнениях.`);
+    }
     for (const mistake of mistakes) {
       const exercise = getExercise(mistake.id)!;
       const topic = getTopicOfExercise(mistake.id);
       const answer = describeAnswer(exercise, mistake.answer);
+      const marks = answer ? answerMarks(exercise, mistake.answer) : null;
       const latest = results.get(mistake.id);
+      const numbers = topic ? numbersOf(topic.key) : "";
       lines.push(
         `- Упражнение «${exercise.question}»${topic ? ` (${topic.path.join(" › ")})` : ""}: ${VERDICT_TEXT[mistake.verdict]}.` +
           (answer ? ` Ответ человека: ${answer}.` : "") +
-          (latest === "correct" ? " Позже человек ответил на него верно." : "") +
-          ` Объяснение верного ответа: ${exercise.explanation}`,
+          (marks?.errors ? ` Что в ответе неверно: ${marks.errors}.` : "") +
+          (marks?.correct ? ` Верно, не ошибка: ${marks.correct}.` : "") +
+          (latest === "correct" ? " Позже человек ответил на него верно — сейчас это уже не ошибка." : "") +
+          ` Объяснение верного ответа: ${exercise.explanation}` +
+          (numbers
+            ? ` Фрагменты этой ошибки: ${numbers}.`
+            : " Раздела этой ошибки среди найденных фрагментов нет — без номера."),
       );
     }
   }
@@ -119,13 +137,13 @@ export function describeAnswer(exercise: Exercise, answer: unknown): string | nu
     case "multiple-choice": {
       const selected = stringList(record.selected);
       const texts = selected.map((id) => exercise.options.find((option) => option.id === id)?.text).filter(Boolean);
-      return texts.length > 0 ? `выбрал(а) ${texts.map((text) => `«${text}»`).join(", ")}` : null;
+      return texts.length > 0 ? `выбрал(а) ${texts.map((text) => quote(text ?? "")).join(", ")}` : null;
     }
     case "true-false": {
       const answers = isPlainRecord(record.answers) ? record.answers : {};
       const parts = exercise.statements
         .filter((statement) => typeof answers[statement.id] === "boolean")
-        .map((statement) => `«${statement.text}» — ${answers[statement.id] ? "верно" : "неверно"}`);
+        .map((statement) => `${quote(statement.text)} — ${answers[statement.id] ? "верно" : "неверно"}`);
       return parts.length > 0 ? `оценил(а) утверждения так: ${parts.join("; ")}` : null;
     }
     case "match-pairs": {
@@ -133,7 +151,7 @@ export function describeAnswer(exercise: Exercise, answer: unknown): string | nu
       const parts = exercise.terms
         .map((term) => {
           const definition = exercise.definitions.find((item) => item.id === matches[term.id]);
-          return definition ? `«${term.text}» → «${definition.text}»` : null;
+          return definition ? `${quote(term.text)} → ${quote(definition.text)}` : null;
         })
         .filter(Boolean);
       return parts.length > 0 ? `соединил(а) пары: ${parts.join("; ")}` : null;
@@ -149,7 +167,7 @@ export function describeAnswer(exercise: Exercise, answer: unknown): string | nu
       const texts = stringList(record.selected)
         .map((id) => versions.find((version) => version.id === id)?.text)
         .filter(Boolean);
-      return texts.length > 0 ? `взял(а) в промпт: ${texts.map((text) => `«${text}»`).join(", ")}` : "ничего не взял(а)";
+      return texts.length > 0 ? `взял(а) в промпт: ${texts.map((text) => quote(text ?? "")).join(", ")}` : "ничего не взял(а)";
     }
     default:
       return null;

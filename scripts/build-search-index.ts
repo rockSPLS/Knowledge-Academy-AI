@@ -55,23 +55,37 @@ async function main() {
     }
   }
 
-  const changed = sources.filter((chunk) => !known.has(chunk.hash));
+  // Заголовки разделов «Статья › Раздел» (кроме вступления) — свои векторы, по тексту заголовка
+  if (sameModel) {
+    for (const chunk of previous!.chunks) {
+      if (chunk.headingEmbedding?.length === EMBEDDING_DIMENSIONS) known.set(headingKey(chunk.path), chunk.headingEmbedding);
+    }
+  }
+  const items = [
+    ...sources.map((chunk) => ({ key: chunk.hash, text: chunk.text })),
+    ...sources.filter(hasHeading).map((chunk) => ({ key: headingKey(chunk.path), text: chunk.path.join(" › ") })),
+  ];
+  const changed = items.filter((item) => !known.has(item.key));
   for (let start = 0; start < changed.length; start += BATCH_SIZE) {
     const batch = changed.slice(start, start + BATCH_SIZE);
     try {
       const vectors = await embedTexts(
         config,
-        batch.map((chunk) => chunk.text),
+        batch.map((item) => item.text),
         { timeoutMs: BATCH_TIMEOUT_MS },
       );
-      batch.forEach((chunk, i) => known.set(chunk.hash, vectors[i].map(round)));
+      batch.forEach((item, i) => known.set(item.key, vectors[i].map(round)));
     } catch (error) {
       console.error(`Индекс не обновлён: сервис эмбеддингов ответил ошибкой — ${describeEmbeddingError(error)}`);
       process.exit(1);
     }
   }
 
-  const chunks: IndexedChunk[] = sources.map((chunk) => ({ ...chunk, embedding: known.get(chunk.hash)! }));
+  const chunks: IndexedChunk[] = sources.map((chunk) => ({
+    ...chunk,
+    embedding: known.get(chunk.hash)!,
+    ...(hasHeading(chunk) && { headingEmbedding: known.get(headingKey(chunk.path))! }),
+  }));
   const index: SearchIndexFile = { model: config.model, dimensions: EMBEDDING_DIMENSIONS, chunks };
   const text = serializeIndex(index);
   writeFileSync(INDEX_PATH, text, "utf8");
@@ -80,10 +94,15 @@ async function main() {
   console.log(
     `Фрагментов: ${chunks.length} (разделов ${chunks.filter((c) => c.kind === "section").length}, ` +
       `упражнений ${chunks.filter((c) => c.kind === "exercise").length}). ` +
-      `Пересчитано: ${changed.length}, без изменений: ${chunks.length - changed.length}, ` +
+      `Пересчитано векторов (вместе с заголовками разделов): ${changed.length}, без изменений: ${items.length - changed.length}, ` +
       `ушло из индекса: ${removed}. Файл: ${(Buffer.byteLength(text) / 1024).toFixed(0)} КБ.`,
   );
 }
+
+// Заголовок есть у раздела, кроме вступления: заголовок вступления — название статьи,
+// и оно близко к любому вопросу о её теме
+const hasHeading = (chunk: { kind: string; sectionId: string }) => chunk.kind === "section" && chunk.sectionId !== "";
+const headingKey = (path: string[]) => `heading:${path.join(" › ")}`;
 
 // Пять знаков после запятой: у нормированного вектора этого хватает для сравнения,
 // а файл индекса вдвое меньше

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef } from "react";
-import Link from "next/link";
+import { ScrollLink } from "@/components/layout/ScrollLink";
 import { LoaderCircle, Search, TriangleAlert, X } from "lucide-react";
 import { MAX_QUESTION_LENGTH } from "@/lib/llm/limits";
 import { useSavedJourneys } from "@/components/progress/hooks";
@@ -22,6 +22,10 @@ const DEV_FIXTURES = [
   { id: "not-in-materials", label: "В материалах нет" },
   { id: "words-only", label: "Без модели" },
   { id: "nothing-found", label: "Ничего не нашлось" },
+  // Для этих трёх нужны путешествия и прогресс набора scripts/search-answer-sets.json
+  { id: "what-to-review", label: "Что мне повторить" },
+  { id: "known-photosynthesis", label: "Что я знаю про фотосинтез" },
+  { id: "my-mistakes", label: "Где я ошибался" },
 ];
 const IS_DEV = process.env.NODE_ENV === "development";
 
@@ -201,7 +205,7 @@ function AnswerText({
     const source = /^\[(\d+)\]$/.test(part) ? sources[Number(part.slice(1, -1)) - 1] : undefined;
     if (!source) return part;
     return (
-      <Link
+      <ScrollLink
         key={i}
         href={source.href}
         onClick={onSourceClick}
@@ -209,13 +213,14 @@ function AnswerText({
         className="mx-0.5 align-super text-xs font-medium text-accent hover:text-accent-hover"
       >
         [{source.number}]
-      </Link>
+      </ScrollLink>
     );
   });
 }
 
-const TAG = "mr-2 rounded-md px-1.5 py-0.5 text-xs font-medium";
-const KIND_TAG = `${TAG} bg-accent-soft text-accent-soft-foreground`;
+// Ярлыки — те же и в разборе ошибок (components/review/ReviewBlock.tsx)
+export const TAG = "mr-2 rounded-md px-1.5 py-0.5 text-xs font-medium";
+export const KIND_TAG = `${TAG} bg-accent-soft text-accent-soft-foreground`;
 
 function SourceItem({ source, onSourceClick }: { source: SearchSource; onSourceClick: () => void }) {
   return (
@@ -226,13 +231,13 @@ function SourceItem({ source, onSourceClick }: { source: SearchSource; onSourceC
           <>
             <p>
               <span className={KIND_TAG}>Путешествие</span>
-              <Link
+              <ScrollLink
                 href={source.href}
                 onClick={onSourceClick}
                 className="font-medium text-accent underline underline-offset-4 hover:text-accent-hover"
               >
                 {source.path.join(" › ")}
-              </Link>
+              </ScrollLink>
             </p>
             <JourneyDate journeyId={source.journeyId} />
             <p className="text-muted">{source.snippet}</p>
@@ -253,24 +258,24 @@ function SourceItem({ source, onSourceClick }: { source: SearchSource; onSourceC
             ) : (
               <p className="text-xs text-subtle">Объяснение откроется, когда вы ответите на этот вопрос</p>
             )}
-            <Link
+            <ScrollLink
               href={source.href}
               onClick={onSourceClick}
               aria-label={`К разделу: ${source.path.join(" › ")}`}
               className="inline-block text-accent underline underline-offset-4 hover:text-accent-hover"
             >
               К разделу
-            </Link>
+            </ScrollLink>
           </>
         ) : (
           <>
-            <Link
+            <ScrollLink
               href={source.href}
               onClick={onSourceClick}
               className="font-medium text-accent underline underline-offset-4 hover:text-accent-hover"
             >
               {source.path.join(" › ")}
-            </Link>
+            </ScrollLink>
             <p className="text-muted">{source.snippet}</p>
           </>
         )}

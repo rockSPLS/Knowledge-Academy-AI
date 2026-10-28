@@ -33,6 +33,8 @@ export type JourneyChunk = {
   path: string[];
   // Для поиска по словам и для эмбеддинга: путь, понятие одним предложением и конспект
   text: string;
+  // Что нужно понять — одно предложение из плана путешествия; его видит модель
+  concept: string;
   // Конспект — его видят модель и источник
   summary: string;
   // Нормированный вектор длины JOURNEY_DIMENSIONS; null — ещё не посчитан
@@ -55,6 +57,7 @@ export function journeyChunks(journey: JourneySearchInput, model: string | null)
       checkpointIndex: i,
       path,
       text: `${path.join(" › ")}\n\n${checkpoint.concept}\n${checkpoint.summary}`,
+      concept: checkpoint.concept,
       summary: checkpoint.summary,
       embedding: vectors ? decodeVector(vectors[i]) : null,
     };

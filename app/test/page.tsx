@@ -5,10 +5,12 @@ import {
   TestFinish,
   TestProgress,
   TestQuestions,
+  TestReview,
   TestScrollButtons,
   TestSummary,
 } from "@/components/test/TestParts";
 import { getAllExerciseIds } from "@/lib/exercises/bank";
+import { getArticleTopics } from "@/lib/progress/topics";
 
 export const metadata: Metadata = {
   title: "Тест",
@@ -35,6 +37,8 @@ export default function TestPage() {
           <TestFinish />
         </TestQuestions>
         <TestSummary />
+        {/* Темы статей — для списка «что стоит повторить», если разбора нет: без объяснений */}
+        <TestReview articles={getArticleTopics()} />
         <TestScrollButtons />
       </TestProvider>
     </div>

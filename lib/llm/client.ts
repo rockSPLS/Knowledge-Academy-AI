@@ -7,6 +7,7 @@ import {
   NoOutputGeneratedError,
   Output,
   RetryError,
+  type LanguageModelUsage,
 } from "ai";
 import type { z } from "zod";
 
@@ -48,6 +49,7 @@ export async function generateStructured<T>({
   timeoutMs = DEFAULT_TIMEOUT_MS,
   maxOutputTokens = DEFAULT_MAX_OUTPUT_TOKENS,
   abortSignal,
+  onUsage,
 }: {
   schema: z.ZodType<T>;
   system: string;
@@ -56,6 +58,8 @@ export async function generateStructured<T>({
   maxOutputTokens?: number;
   // Отмена запроса: посетитель закрыл страницу или запрос больше не нужен
   abortSignal?: AbortSignal;
+  // Расход токенов удачного ответа — для замеров при разработке (app/api/review/dev)
+  onUsage?: (usage: LanguageModelUsage) => void;
 }): Promise<ModelResult<T>> {
   const config = readConfig();
   if (!config) return { ok: false, reason: "not-configured" };
@@ -71,7 +75,7 @@ export async function generateStructured<T>({
   try {
     // Временные сбои (429, 5xx) библиотека повторяет сама — по умолчанию до двух раз;
     // тайм-аут общий на все попытки
-    const { output } = await generateText({
+    const { output, usage } = await generateText({
       model: provider(config.model),
       output: Output.object({ schema }),
       system,
@@ -84,6 +88,7 @@ export async function generateStructured<T>({
         ? { model: { reasoningEffort: config.reasoningEffort } }
         : undefined,
     });
+    onUsage?.(usage);
     return { ok: true, data: output };
   } catch (error) {
     // Запрос отменили сами — это не сбой модели, в лог не пишем

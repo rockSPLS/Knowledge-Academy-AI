@@ -5,6 +5,8 @@ import Link from "next/link";
 import { journeyResult, type JourneyResult } from "@/components/journey/results";
 import { journeyHref, journeyStatusText } from "@/components/journey/SavedJourneys";
 import { clearSavedJourneys, type SavedJourney } from "@/components/journey/saved";
+import { ReviewBlock } from "@/components/review/ReviewBlock";
+import { clearSavedReview } from "@/components/review/storage";
 import { STORAGE_KEY as SEARCH_STORAGE_KEY } from "@/components/search/SearchProvider";
 import type { Verdict } from "@/lib/exercises/types";
 import { plural } from "@/lib/plural";
@@ -17,7 +19,8 @@ import { latestAnswers } from "./summary";
 import { clearProgressData } from "./store";
 
 // Страница «Мой прогресс»: сверху четыре карточки (лучший результат теста, время
-// на статьях, путешествия, сколько тем стоит повторить), затем темы статей по разделам,
+// на статьях, путешествия, сколько тем стоит повторить), под ними «Разбор ошибок»
+// (components/review/ReviewBlock.tsx), затем темы статей по разделам,
 // путешествия и «Ваши данные» — что хранится, что уходит модели и удаление всего.
 // Всё считается из прогресса в браузере каждый раз заново: правило «усвоено / стоит
 // повторить» — одно на весь портал (lib/progress/mastery.ts).
@@ -54,6 +57,10 @@ export function ProgressApp({ articles }: { articles: ArticleTopics }) {
       ) : (
         <>
           <SummaryCards data={data} journeys={journeys} articles={articles} latest={latest} />
+          <ReviewBlock
+            articles={articles}
+            intro="ИИ разберёт ваши ошибки в упражнениях, тесте и путешествиях и скажет, что повторить, — со ссылками на разделы статей."
+          />
           <ArticleTopicsSection data={data} articles={articles} latest={latest} />
           <JourneysSection journeys={journeys} />
         </>
@@ -279,12 +286,13 @@ function YourData({ canDelete, onDeleted }: { canDelete: boolean; onDeleted: () 
   function deleteAll() {
     clearProgressData();
     clearSavedJourneys();
-    // Сохранённый ответ поиска мог опираться на прогресс — тоже удаляется
+    // Сохранённые ответ поиска и разбор ошибок опирались на прогресс — тоже удаляются
     try {
       sessionStorage.removeItem(SEARCH_STORAGE_KEY);
     } catch {
       // Хранилище недоступно — удалять нечего
     }
+    clearSavedReview();
     close();
     onDeleted();
   }
@@ -300,8 +308,9 @@ function YourData({ canDelete, onDeleted }: { canDelete: boolean; onDeleted: () 
       </p>
       <p className="text-sm text-muted">
         Модели уходит только короткая сводка: какие темы усвоены, какие стоит повторить, и несколько последних ошибок
-        с вашими ответами. Чтобы поиск находил и ваши путешествия, вместе с вопросом уходят их названия, понятия
-        и конспекты. Время и даты не уходят.
+        с вашими ответами. Чтобы поиск и разбор ошибок учитывали ваши путешествия, вместе с запросом уходят их
+        названия, понятия и конспекты. Разбору ошибок уходят ещё упражнения путешествий, где были ошибки: вопрос,
+        ваш ответ, в том числе своими словами, и оценка ИИ. Время и даты не уходят.
       </p>
       {canDelete &&
         (isConfirming ? (

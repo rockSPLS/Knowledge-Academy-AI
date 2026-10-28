@@ -4,83 +4,147 @@
     {
       "group": "tune",
       "question": "Почему чат-бот на один и тот же вопрос каждый раз отвечает немного по-другому?",
-      "expected": ["how-llm-works#kak-rozhdaetsya-otvet"]
+      "expected": [
+        "how-llm-works#kak-rozhdaetsya-otvet"
+      ]
     },
     {
       "group": "tune",
       "question": "Откуда модель знает, что слово «лук» здесь про овощ, а не про оружие?",
-      "expected": ["how-llm-works#vnimanie-kak-model-ponimaet-kontekst"]
+      "expected": [
+        "how-llm-works#vnimanie-kak-model-ponimaet-kontekst"
+      ]
     },
     {
       "group": "tune",
       "question": "Помнит ли нейросеть наш вчерашний разговор?",
-      "expected": ["how-llm-works#chego-u-modeli-net"]
+      "expected": [
+        "how-llm-works#chego-u-modeli-net"
+      ]
     },
     {
       "group": "tune",
       "question": "Почему нейросеть иногда придумывает книги и статьи, которых нет?",
-      "expected": ["hallucinations#pochemu-oni-voznikayut"]
+      "expected": [
+        "hallucinations#pochemu-oni-voznikayut"
+      ]
     },
     {
       "group": "tune",
       "question": "Как убедиться, что цитата из ответа модели настоящая?",
-      "expected": ["hallucinations#kak-proveryat"]
+      "expected": [
+        "hallucinations#kak-proveryat"
+      ]
     },
     {
       "group": "tune",
       "question": "Что написать в запросе, чтобы модель меньше выдумывала?",
-      "expected": ["hallucinations#kak-snizit-risk"]
+      "expected": [
+        "hallucinations#kak-snizit-risk"
+      ]
     },
     {
       "group": "tune",
       "question": "Можно ли отправить в чат-бот договор с паспортными данными клиента?",
-      "expected": ["ai-safety#1-chto-vy-otdaete-konfidentsialnost"]
+      "expected": [
+        "ai-safety#1-chto-vy-otdaete-konfidentsialnost"
+      ]
     },
     {
       "group": "tune",
       "question": "Что делать, если в письме, которое читает ассистент, спрятана команда для него?",
-      "expected": ["ai-safety#ataki-na-modeli-inektsiya-prompta"]
+      "expected": [
+        "ai-safety#ataki-na-modeli-inektsiya-prompta"
+      ]
     },
     {
       "group": "tune",
       "question": "Мне позвонили голосом начальника и просят срочно перевести деньги — как быть?",
-      "expected": ["ai-safety#ii-v-rukakh-moshennikov"]
+      "expected": [
+        "ai-safety#ii-v-rukakh-moshennikov"
+      ]
     },
     {
       "group": "holdout",
       "question": "Как объяснить модели, для кого я пишу текст и какого он должен быть объёма?",
-      "expected": ["prompt-structure#iz-chego-sostoit-khoroshiy-prompt"]
+      "expected": [
+        "prompt-structure#iz-chego-sostoit-khoroshiy-prompt"
+      ]
     },
     {
       "group": "holdout",
       "question": "Почему лучше просить «пиши просто», а не «не пиши сложно»?",
-      "expected": ["prompt-structure#priemy-kotorye-rabotayut"]
+      "expected": [
+        "prompt-structure#priemy-kotorye-rabotayut"
+      ]
     },
     {
       "group": "holdout",
       "question": "Как модель становится вежливым помощником, а не просто дописывает текст?",
-      "expected": ["how-llm-works#iz-prodolzhatelya-teksta-v-pomoshchnika"]
+      "expected": [
+        "how-llm-works#iz-prodolzhatelya-teksta-v-pomoshchnika"
+      ]
     },
     {
       "group": "holdout",
       "question": "Можно ли сразу запускать программу, которую написал ИИ?",
-      "expected": ["ai-safety#3-chto-vy-delaete-s-rezultatom-otvetstvennost"]
+      "expected": [
+        "ai-safety#3-chto-vy-delaete-s-rezultatom-otvetstvennost"
+      ]
     },
     {
       "group": "holdout",
       "question": "В каких областях ответам модели особенно опасно доверять без проверки?",
-      "expected": ["hallucinations#gde-risk-vyshe-vsego", "ai-safety#2-chemu-vy-verite-dostovernost"]
+      "expected": [
+        "hallucinations#gde-risk-vyshe-vsego",
+        "ai-safety#2-chemu-vy-verite-dostovernost"
+      ]
+    },
+    {
+      "group": "tune",
+      "question": "Как распознать галлюцинацию?",
+      "expected": [
+        "hallucinations#priznaki-na-kotorye-stoit-obratit-vnimanie",
+        "hallucinations#kak-proveryat"
+      ]
     }
   ],
-  "offTopic": ["Как приготовить борщ на четверых?", "Какая погода будет завтра в горах?"],
+  "offTopic": [
+    "Как приготовить борщ на четверых?",
+    "Какая погода будет завтра в горах?"
+  ],
   "journeyQuestions": [
-    { "question": "Откуда берётся кислород, который выделяют растения?", "expected": "photosynthesis#0" },
-    { "question": "Почему листья у большинства растений зелёные?", "expected": "photosynthesis#1" },
-    { "question": "Зачем дрожжам тепло и что будет в холодильнике?", "expected": "dough#2" },
-    { "question": "Почему хлеб в духовке становится пористым?", "expected": "dough#3" },
-    { "question": "Почему цены растут, если все ждут подорожания?", "expected": "inflation#2" },
-    { "question": "Чем дефляция отличается от инфляции?", "expected": "inflation#3" },
-    { "question": "Почему второй раз той же болезнью болеют легче?", "expected": "vaccines#3" },
-    { "question": "Как прививки защищают тех, кто не привит?", "expected": "vaccines#4" }
+    {
+      "question": "Откуда берётся кислород, который выделяют растения?",
+      "expected": "photosynthesis#0"
+    },
+    {
+      "question": "Почему листья у большинства растений зелёные?",
+      "expected": "photosynthesis#1"
+    },
+    {
+      "question": "Зачем дрожжам тепло и что будет в холодильнике?",
+      "expected": "dough#2"
+    },
+    {
+      "question": "Почему хлеб в духовке становится пористым?",
+      "expected": "dough#3"
+    },
+    {
+      "question": "Почему цены растут, если все ждут подорожания?",
+      "expected": "inflation#2"
+    },
+    {
+      "question": "Чем дефляция отличается от инфляции?",
+      "expected": "inflation#3"
+    },
+    {
+      "question": "Почему второй раз той же болезнью болеют легче?",
+      "expected": "vaccines#3"
+    },
+    {
+      "question": "Как прививки защищают тех, кто не привит?",
+      "expected": "vaccines#4"
+    }
   ]
 }

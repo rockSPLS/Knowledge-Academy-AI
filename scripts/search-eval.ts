@@ -1,4 +1,4 @@
-// Замер качества поиска: npm run search:eval -- [--group tune|holdout|all] [--instruction ru|en|none] [--k 60]
+// Замер качества поиска: npm run search:eval -- [--group tune|holdout|all] [--instruction ru|en|none] [--k 60] [--headings off]
 // По набору вопросов scripts/search-eval-questions.json считает, попадает ли ожидаемый
 // раздел в первую тройку: отдельно по смыслу, по словам и в сочетании. Источник «попал»,
 // если в тройке есть фрагмент этого раздела — сам раздел или упражнение к нему
@@ -54,6 +54,8 @@ async function main() {
   const questions = set.questions.filter((q) => group === "all" || q.group === group);
 
   const vectors = index.chunks.map((chunk) => chunk.embedding);
+  // Без заголовков (--headings off) — как до того, как близость стала считаться и по заголовку
+  const headings = arg("headings", "on") === "off" ? undefined : index.chunks.map((chunk) => chunk.headingEmbedding);
   const words = buildWordIndex(index.chunks.map((chunk) => chunk.text));
   const sectionOf = (i: number) => `${index.chunks[i].articleSlug}#${index.chunks[i].sectionId}`;
   const queryVectors = await embedTexts(
@@ -66,10 +68,10 @@ async function main() {
   const topSimilarity: number[] = [];
   questions.forEach((q, n) => {
     // Без порога: в замере видно, где оказался бы нужный раздел
-    const semantic = rankSemantic(vectors, queryVectors[n], -Infinity);
+    const semantic = rankSemantic(vectors, queryVectors[n], -Infinity, headings);
     const byWords = rankWords(words, q.question);
     // Сочетание — как на сайте: с порогом близости
-    const fused = combine(rankSemantic(vectors, queryVectors[n]), byWords, k);
+    const fused = combine(rankSemantic(vectors, queryVectors[n], undefined, headings), byWords, k);
     const top3 = (list: Ranked[]) => list.slice(0, 3).map((item) => sectionOf(item.index));
     const hit = (list: Ranked[]) => top3(list).some((section) => q.expected.includes(section));
     const marks = (["semantic", "words", "fused"] as const).map((name) => {
@@ -79,13 +81,15 @@ async function main() {
     });
     topSimilarity.push(semantic[0].score);
     const place = semantic.findIndex((item) => q.expected.includes(sectionOf(item.index)));
-    console.log(`${q.group} | ${marks.join("  ")} | близость №1 ${semantic[0].score.toFixed(3)}, нужный раздел — место ${place + 1} (${semantic[place]?.score.toFixed(3)}) | ${q.question}`);
+    // Место в сочетании — сколько фрагментов нужно отдать модели, чтобы нужный раздел попал в найденные (RESULT_COUNT)
+    const fusedPlace = fused.findIndex((item) => q.expected.includes(sectionOf(item.index)));
+    console.log(`${q.group} | ${marks.join("  ")} | близость №1 ${semantic[0].score.toFixed(3)}, нужный раздел — место ${place + 1} (${semantic[place]?.score.toFixed(3)}), в сочетании — ${fusedPlace + 1} | ${q.question}`);
     if (!hit(fused)) console.log(`   тройка сочетания: ${top3(fused).join(", ")}`);
   });
 
   set.offTopic.forEach((question, n) => {
-    const semantic = rankSemantic(vectors, queryVectors[questions.length + n], -Infinity);
-    const found = combine(rankSemantic(vectors, queryVectors[questions.length + n]), rankWords(words, question)).length;
+    const semantic = rankSemantic(vectors, queryVectors[questions.length + n], -Infinity, headings);
+    const found = combine(rankSemantic(vectors, queryVectors[questions.length + n], undefined, headings), rankWords(words, question)).length;
     console.log(`посторонний | близость №1 ${semantic[0].score.toFixed(3)} (${sectionOf(semantic[0].index)}), слов найдено: ${rankWords(words, question).length}, сочетание нашло: ${found} | ${question}`);
   });
 

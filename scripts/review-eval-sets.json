@@ -1,0 +1,540 @@
+{
+  "articles": {
+    "description": "① Ошибки в статьях и тесте: 4 темы, которые стоит повторить; у трёх упражнений с выбором есть ответ (у порядка шагов не на месте один шаг из четырёх — итог «частично»), у упражнения с пропусками нет; исправленная ошибка («Признаки…», позже ответ верный) в разбор попасть не должна. Путешествий нет.",
+    "progress": {
+      "exercises": [
+        {
+          "id": "hallucinations-cause",
+          "verdict": "incorrect"
+        },
+        {
+          "id": "prompt-tips-true-false",
+          "verdict": "partial"
+        },
+        {
+          "id": "safety-fraud-steps",
+          "verdict": "partial"
+        },
+        {
+          "id": "llm-generation-blanks",
+          "verdict": "incorrect"
+        },
+        {
+          "id": "hallucinations-red-flags",
+          "verdict": "correct"
+        },
+        {
+          "id": "hallucinations-definition",
+          "verdict": "correct"
+        },
+        {
+          "id": "llm-terms-pairs",
+          "verdict": "correct"
+        }
+      ],
+      "mistakes": [
+        {
+          "id": "hallucinations-cause",
+          "verdict": "incorrect",
+          "answer": {
+            "selected": [
+              "a"
+            ]
+          }
+        },
+        {
+          "id": "prompt-tips-true-false",
+          "verdict": "partial",
+          "answer": {
+            "answers": {
+              "brief": true,
+              "do-not": true,
+              "both-ways": false
+            }
+          }
+        },
+        {
+          "id": "safety-fraud-steps",
+          "verdict": "partial",
+          "answer": {
+            "order": [
+              "pause",
+              "verify",
+              "pay",
+              "agree"
+            ]
+          }
+        },
+        {
+          "id": "llm-generation-blanks",
+          "verdict": "incorrect"
+        },
+        {
+          "id": "hallucinations-red-flags",
+          "verdict": "partial",
+          "answer": {
+            "selected": [
+              "a",
+              "c"
+            ]
+          }
+        }
+      ],
+      "journeyConcepts": [],
+      "masteredConcepts": []
+    }
+  },
+  "journeys": {
+    "description": "② Только понятия путешествий: «Формат и объём» (путешествие о промптах для писем — к нему поиск находит разделы статей) и «Хлорофилл и свет» («Фотосинтез» — разделов статей близко нет).",
+    "progress": {
+      "exercises": [
+        {
+          "id": "hallucinations-definition",
+          "verdict": "correct"
+        }
+      ],
+      "mistakes": [],
+      "journeyConcepts": [
+        {
+          "journeyId": "j-test-prompts",
+          "journey": "Как писать промпты для деловых писем",
+          "concept": "Формат и объём"
+        },
+        {
+          "journeyId": "j-test-photo",
+          "journey": "Фотосинтез",
+          "concept": "Хлорофилл и свет"
+        }
+      ],
+      "masteredConcepts": [
+        {
+          "journeyId": "j-test-prompts",
+          "journey": "Как писать промпты для деловых писем",
+          "concept": "Роль и контекст"
+        }
+      ]
+    },
+    "journeys": [
+      {
+        "id": "j-test-prompts",
+        "title": "Как писать промпты для деловых писем",
+        "checkpoints": [
+          {
+            "id": "c1",
+            "title": "Роль и контекст",
+            "concept": "Роль подсказывает модели, кем выступить, а контекст — для кого и зачем нужен текст.",
+            "summary": "Хороший промпт начинается с роли и контекста: модели говорят, кем выступить (например, вежливым менеджером поддержки) и для кого пишется письмо — клиенту, который ждёт заказ. Без контекста модель пишет усреднённо и не попадает в тон."
+          },
+          {
+            "id": "c2",
+            "title": "Формат и объём",
+            "concept": "Формат и объём задают, как оформить ответ и сколько писать.",
+            "summary": "Чтобы письмо было нужной длины, объём задают числом — «до 120 слов», а не словом «кратко». Формат описывают явно: приветствие, суть, что будет дальше, подпись."
+          }
+        ]
+      },
+      {
+        "id": "j-test-photo",
+        "title": "Фотосинтез",
+        "checkpoints": [
+          {
+            "id": "p1",
+            "title": "Хлорофилл и свет",
+            "concept": "Хлорофилл поглощает свет и запускает фотосинтез.",
+            "summary": "Хлорофилл — зелёный пигмент в хлоропластах. Он поглощает красный и синий свет, а зелёный отражает, поэтому листья зелёные. Энергия света идёт на разложение воды и запасается в молекулах-переносчиках."
+          }
+        ]
+      }
+    ]
+  },
+  "all": {
+    "description": "③ Всё вместе: 4 темы статей из набора ① и 2 понятия из набора ②.",
+    "progress": {
+      "exercises": [
+        {
+          "id": "hallucinations-cause",
+          "verdict": "incorrect"
+        },
+        {
+          "id": "prompt-tips-true-false",
+          "verdict": "partial"
+        },
+        {
+          "id": "safety-fraud-steps",
+          "verdict": "partial"
+        },
+        {
+          "id": "llm-generation-blanks",
+          "verdict": "incorrect"
+        },
+        {
+          "id": "hallucinations-red-flags",
+          "verdict": "correct"
+        },
+        {
+          "id": "hallucinations-definition",
+          "verdict": "correct"
+        },
+        {
+          "id": "llm-terms-pairs",
+          "verdict": "correct"
+        }
+      ],
+      "mistakes": [
+        {
+          "id": "hallucinations-cause",
+          "verdict": "incorrect",
+          "answer": {
+            "selected": [
+              "a"
+            ]
+          }
+        },
+        {
+          "id": "prompt-tips-true-false",
+          "verdict": "partial",
+          "answer": {
+            "answers": {
+              "brief": true,
+              "do-not": true,
+              "both-ways": false
+            }
+          }
+        },
+        {
+          "id": "safety-fraud-steps",
+          "verdict": "partial",
+          "answer": {
+            "order": [
+              "pause",
+              "verify",
+              "pay",
+              "agree"
+            ]
+          }
+        },
+        {
+          "id": "llm-generation-blanks",
+          "verdict": "incorrect"
+        },
+        {
+          "id": "hallucinations-red-flags",
+          "verdict": "partial",
+          "answer": {
+            "selected": [
+              "a",
+              "c"
+            ]
+          }
+        }
+      ],
+      "journeyConcepts": [
+        {
+          "journeyId": "j-test-prompts",
+          "journey": "Как писать промпты для деловых писем",
+          "concept": "Формат и объём"
+        },
+        {
+          "journeyId": "j-test-photo",
+          "journey": "Фотосинтез",
+          "concept": "Хлорофилл и свет"
+        }
+      ],
+      "masteredConcepts": [
+        {
+          "journeyId": "j-test-prompts",
+          "journey": "Как писать промпты для деловых писем",
+          "concept": "Роль и контекст"
+        }
+      ]
+    },
+    "journeys": [
+      {
+        "id": "j-test-prompts",
+        "title": "Как писать промпты для деловых писем",
+        "checkpoints": [
+          {
+            "id": "c1",
+            "title": "Роль и контекст",
+            "concept": "Роль подсказывает модели, кем выступить, а контекст — для кого и зачем нужен текст.",
+            "summary": "Хороший промпт начинается с роли и контекста: модели говорят, кем выступить (например, вежливым менеджером поддержки) и для кого пишется письмо — клиенту, который ждёт заказ. Без контекста модель пишет усреднённо и не попадает в тон."
+          },
+          {
+            "id": "c2",
+            "title": "Формат и объём",
+            "concept": "Формат и объём задают, как оформить ответ и сколько писать.",
+            "summary": "Чтобы письмо было нужной длины, объём задают числом — «до 120 слов», а не словом «кратко». Формат описывают явно: приветствие, суть, что будет дальше, подпись."
+          }
+        ]
+      },
+      {
+        "id": "j-test-photo",
+        "title": "Фотосинтез",
+        "checkpoints": [
+          {
+            "id": "p1",
+            "title": "Хлорофилл и свет",
+            "concept": "Хлорофилл поглощает свет и запускает фотосинтез.",
+            "summary": "Хлорофилл — зелёный пигмент в хлоропластах. Он поглощает красный и синий свет, а зелёный отражает, поэтому листья зелёные. Энергия света идёт на разложение воды и запасается в молекулах-переносчиках."
+          }
+        ]
+      }
+    ]
+  },
+  "no-mistakes": {
+    "description": "Ошибок нет: модель не вызывается.",
+    "progress": {
+      "exercises": [
+        {
+          "id": "hallucinations-definition",
+          "verdict": "correct"
+        }
+      ],
+      "mistakes": [],
+      "journeyConcepts": [],
+      "masteredConcepts": [
+        {
+          "journeyId": "j-test-prompts",
+          "journey": "Как писать промпты для деловых писем",
+          "concept": "Роль и контекст"
+        }
+      ]
+    }
+  },
+  "no-progress": {
+    "description": "Прогресса нет: модель не вызывается."
+  },
+  "many": {
+    "description": "④ Всё вместе, тем статей 6, понятий 2: в разбор должны войти и темы статей, и оба понятия. У понятий — упражнения путешествий с ошибкой: у «Хлорофилла и света» — калибровка (ответы своими словами, два из трёх неверны), у «Формата и объёма» — свободный ответ своими словами с оценкой ИИ по пунктам.",
+    "progress": {
+      "exercises": [
+        {
+          "id": "hallucinations-cause",
+          "verdict": "incorrect"
+        },
+        {
+          "id": "prompt-tips-true-false",
+          "verdict": "partial"
+        },
+        {
+          "id": "safety-fraud-steps",
+          "verdict": "partial"
+        },
+        {
+          "id": "llm-generation-blanks",
+          "verdict": "incorrect"
+        },
+        {
+          "id": "hallucinations-red-flags",
+          "verdict": "correct"
+        },
+        {
+          "id": "llm-terms-pairs",
+          "verdict": "correct"
+        },
+        {
+          "id": "hallucinations-definition",
+          "verdict": "incorrect"
+        },
+        {
+          "id": "prompt-parts-pairs",
+          "verdict": "incorrect"
+        }
+      ],
+      "mistakes": [
+        {
+          "id": "hallucinations-definition",
+          "verdict": "incorrect",
+          "answer": {
+            "selected": [
+              "a"
+            ]
+          }
+        },
+        {
+          "id": "prompt-parts-pairs",
+          "verdict": "incorrect",
+          "answer": {
+            "matches": {
+              "role": "d",
+              "context": "b",
+              "constraints": "a",
+              "format": "c"
+            }
+          }
+        },
+        {
+          "id": "hallucinations-cause",
+          "verdict": "incorrect",
+          "answer": {
+            "selected": [
+              "a"
+            ]
+          }
+        },
+        {
+          "id": "prompt-tips-true-false",
+          "verdict": "partial",
+          "answer": {
+            "answers": {
+              "brief": true,
+              "do-not": true,
+              "both-ways": false
+            }
+          }
+        },
+        {
+          "id": "safety-fraud-steps",
+          "verdict": "partial",
+          "answer": {
+            "order": [
+              "pause",
+              "verify",
+              "pay",
+              "agree"
+            ]
+          }
+        }
+      ],
+      "journeyConcepts": [
+        {
+          "journeyId": "j-test-prompts",
+          "journey": "Как писать промпты для деловых писем",
+          "concept": "Формат и объём"
+        },
+        {
+          "journeyId": "j-test-photo",
+          "journey": "Фотосинтез",
+          "concept": "Хлорофилл и свет"
+        }
+      ],
+      "masteredConcepts": [
+        {
+          "journeyId": "j-test-prompts",
+          "journey": "Как писать промпты для деловых писем",
+          "concept": "Роль и контекст"
+        }
+      ]
+    },
+    "journeys": [
+      {
+        "id": "j-test-prompts",
+        "title": "Как писать промпты для деловых писем",
+        "checkpoints": [
+          {
+            "id": "c1",
+            "title": "Роль и контекст",
+            "concept": "Роль подсказывает модели, кем выступить, а контекст — для кого и зачем нужен текст.",
+            "summary": "Хороший промпт начинается с роли и контекста: модели говорят, кем выступить (например, вежливым менеджером поддержки) и для кого пишется письмо — клиенту, который ждёт заказ. Без контекста модель пишет усреднённо и не попадает в тон."
+          },
+          {
+            "id": "c2",
+            "title": "Формат и объём",
+            "concept": "Формат и объём задают, как оформить ответ и сколько писать.",
+            "summary": "Чтобы письмо было нужной длины, объём задают числом — «до 120 слов», а не словом «кратко». Формат описывают явно: приветствие, суть, что будет дальше, подпись."
+          }
+        ]
+      },
+      {
+        "id": "j-test-photo",
+        "title": "Фотосинтез",
+        "checkpoints": [
+          {
+            "id": "p1",
+            "title": "Хлорофилл и свет",
+            "concept": "Хлорофилл поглощает свет и запускает фотосинтез.",
+            "summary": "Хлорофилл — зелёный пигмент в хлоропластах. Он поглощает красный и синий свет, а зелёный отражает, поэтому листья зелёные. Энергия света идёт на разложение воды и запасается в молекулах-переносчиках."
+          }
+        ]
+      }
+    ],
+    "journeyExercises": [
+      {
+        "journeyId": "j-test-prompts",
+        "checkpointId": "c2",
+        "question": "Объясните простыми словами, как задать в промпте объём и формат письма клиенту.",
+        "verdict": "partial",
+        "text": "Надо написать модели, чтобы письмо было кратким и вежливым, и попросить красиво его оформить.",
+        "criteria": [
+          {
+            "text": "Объём задан числом, а не словом «кратко»",
+            "met": false,
+            "feedback": "«Кратко» каждый понимает по-своему — модели нужно число, например «до 120 слов»."
+          },
+          {
+            "text": "Формат описан явно: из каких частей состоит письмо",
+            "met": false,
+            "feedback": "«Красиво оформить» не говорит модели, из каких частей должно состоять письмо."
+          },
+          {
+            "text": "Сказано, что тон письма тоже задаётся",
+            "met": true,
+            "feedback": "Да, вежливый тон вы задали."
+          }
+        ],
+        "explanation": "Объём задают числом — «до 120 слов», а не словом «кратко». Формат описывают явно: приветствие, суть, что будет дальше, подпись."
+      },
+      {
+        "journeyId": "j-test-photo",
+        "checkpointId": "p1",
+        "question": "Ответьте своими словами и отметьте, насколько уверены",
+        "verdict": "incorrect",
+        "items": [
+          {
+            "question": "Как называется пигмент, который улавливает свет для фотосинтеза?",
+            "answer": "Хлорофилл",
+            "confident": true,
+            "correct": true,
+            "feedback": "Верно.",
+            "expected": "Хлорофилл"
+          },
+          {
+            "question": "Какие лучи хлорофилл поглощает сильнее всего?",
+            "answer": "Зелёные",
+            "confident": true,
+            "correct": false,
+            "feedback": "Зелёные лучи хлорофилл почти не поглощает — их лист отражает.",
+            "expected": "Красные и синие"
+          },
+          {
+            "question": "Что происходит с зелёными лучами, когда они падают на лист?",
+            "answer": "Лист их поглощает",
+            "confident": false,
+            "correct": false,
+            "feedback": "Наоборот: зелёные лучи почти не поглощаются.",
+            "expected": "Почти не поглощаются, отражаются"
+          }
+        ],
+        "explanation": "Свет для фотосинтеза улавливает хлорофилл. Он сильнее всего поглощает красные и синие лучи, а зелёные почти не поглощает и отражает — поэтому лист и выглядит зелёным."
+      }
+    ]
+  },
+  "one": {
+    "description": "⑤ Одна тема: ошибка только в «Почему они возникают» (выбран вариант «модель ищет ответы в интернете»), остальные ответы верные, путешествий нет.",
+    "progress": {
+      "exercises": [
+        {
+          "id": "hallucinations-cause",
+          "verdict": "incorrect"
+        },
+        {
+          "id": "hallucinations-definition",
+          "verdict": "correct"
+        }
+      ],
+      "mistakes": [
+        {
+          "id": "hallucinations-cause",
+          "verdict": "incorrect",
+          "answer": {
+            "selected": [
+              "a"
+            ]
+          }
+        }
+      ],
+      "journeyConcepts": [],
+      "masteredConcepts": []
+    }
+  }
+}

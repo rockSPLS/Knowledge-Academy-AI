@@ -1,6 +1,6 @@
 {
   "name": "prompt-engineering-academy",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,7 +9,9 @@
     "lint": "eslint",
     "search:index": "tsx --conditions=react-server scripts/build-search-index.ts",
     "search:eval": "tsx --conditions=react-server scripts/search-eval.ts",
-    "search:eval-journeys": "tsx --conditions=react-server scripts/search-eval-journeys.ts"
+    "search:eval-journeys": "tsx --conditions=react-server scripts/search-eval-journeys.ts",
+    "search:answers": "tsx --conditions=react-server scripts/search-answers.ts",
+    "review:eval": "tsx --conditions=react-server scripts/review-eval.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.87",

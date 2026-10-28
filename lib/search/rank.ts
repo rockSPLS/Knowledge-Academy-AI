@@ -20,16 +20,21 @@ export const MIN_SIMILARITY = 0.5;
 
 export type Ranked = { index: number; score: number };
 
-// Близость вопроса к каждому фрагменту — скалярное произведение нормированных векторов
+const similarity = (vector: number[] | null | undefined, query: number[]) =>
+  vector ? vector.reduce((sum, value, i) => sum + value * query[i], 0) : -1;
+
+// Близость вопроса к каждому фрагменту — скалярное произведение нормированных векторов.
+// headings — векторы заголовков тех же фрагментов (у кого есть): близость — наибольшая из двух
 export function rankSemantic(
   vectors: (number[] | null)[],
   query: number[],
   minSimilarity = MIN_SIMILARITY,
+  headings?: (number[] | undefined)[],
 ): Ranked[] {
   return vectors
     .map((vector, index) => ({
       index,
-      score: vector ? vector.reduce((sum, value, i) => sum + value * query[i], 0) : -1,
+      score: Math.max(similarity(vector, query), similarity(headings?.[index], query)),
     }))
     .filter((item) => item.score >= minSimilarity)
     .sort((a, b) => b.score - a.score);
@@ -39,14 +44,14 @@ export function rankSemantic(
 // у фрагментов путешествий вектор короче, и вопрос сравнивается с ними началом своего
 // вектора той же длины. Номера фрагментов сквозные — по порядку наборов
 export function rankSemanticParts(
-  parts: { vectors: (number[] | null)[]; query: number[] }[],
+  parts: { vectors: (number[] | null)[]; query: number[]; headings?: (number[] | undefined)[] }[],
   minSimilarity = MIN_SIMILARITY,
 ): Ranked[] {
   let offset = 0;
   const all: Ranked[] = [];
   for (const part of parts) {
     const start = offset;
-    all.push(...rankSemantic(part.vectors, part.query, minSimilarity).map((item) => ({ ...item, index: item.index + start })));
+    all.push(...rankSemantic(part.vectors, part.query, minSimilarity, part.headings).map((item) => ({ ...item, index: item.index + start })));
     offset += part.vectors.length;
   }
   return all.sort((a, b) => b.score - a.score);

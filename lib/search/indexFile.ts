@@ -13,7 +13,7 @@ export function serializeIndex(index: SearchIndexFile): string {
   const json = JSON.stringify(
     index,
     (key, value) => {
-      if (key === "embedding" && Array.isArray(value)) {
+      if ((key === "embedding" || key === "headingEmbedding") && Array.isArray(value)) {
         vectors.push(JSON.stringify(value));
         return `@@vector${vectors.length - 1}@@`;
       }
