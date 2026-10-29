@@ -2,7 +2,8 @@
 // Наборы — scripts/journey-eval-sets.json.
 // --topics — подбор фрагментов без модели ответа: какие разделы находятся по каждой теме
 //   списка topics и с какой близостью (одним запросом к сервису эмбеддингов на все темы).
-// --set имя — материал набора (тема и сводка прогресса, как в запросе POST /api/journey)
+// --set имя — материал набора (тема и сводка прогресса, как в запросе POST /api/journey; у набора
+//   с article — разделы этой статьи без поиска, как у «Путешествия по этой статье»)
 //   и только шаг плана на настоящей модели: время, расход токенов, план с источниками
 //   и проверка номеров. --prompt печатает и сам промпт, --dry — без запроса к модели,
 //   --raw — ответы модели по попыткам (и отклонённые), --own — для сравнения тот же шаг плана
@@ -19,7 +20,7 @@ import type { LanguageModelUsage } from "ai";
 import { generateStructured } from "@/lib/llm/client";
 import { recordingModel, type Fixture } from "@/lib/journey/fixtures";
 import { generateJourney, planJourney, type AskModel } from "@/lib/journey/generate";
-import { findPortalMaterial, PORTAL_SECTIONS, type PortalMaterial } from "@/lib/journey/portal";
+import { articlePortalMaterial, findPortalMaterial, PORTAL_SECTIONS, type PortalMaterial } from "@/lib/journey/portal";
 import { PORTAL_PLAN_SYSTEM, portalPlanPrompt } from "@/lib/journey/prompts";
 import { embedTexts, QUERY_INSTRUCTION, readEmbeddingConfig } from "@/lib/search/embeddings";
 import { MIN_SIMILARITY, rankSemantic } from "@/lib/search/rank";
@@ -27,7 +28,7 @@ import { parseSearchContext } from "@/lib/search/request";
 
 type EvalSets = {
   topics: string[];
-  sets: Record<string, { description: string; topic: string; progress?: unknown }>;
+  sets: Record<string, { description: string; topic: string; article?: string; progress?: unknown }>;
 };
 
 function arg(name: string): string | undefined {
@@ -50,7 +51,13 @@ async function main() {
   }
   console.log(`== ${name}: ${set.description}`);
   const { progress } = parseSearchContext({ progress: set.progress }, "journey-eval");
-  const found = await findPortalMaterial(set.topic, progress);
+  const byArticle = set.article ? articlePortalMaterial(set.article, set.topic, progress) : null;
+  // Опечатка в article не должна молча увести замер в поиск по всем статьям
+  if (set.article && !byArticle) {
+    console.error(`Статьи ${set.article} нет в индексе — проверьте article набора`);
+    process.exit(1);
+  }
+  const found = byArticle ? { ok: true as const, material: byArticle } : await findPortalMaterial(set.topic, progress);
   if (!found.ok) {
     console.log(`Материала нет: ${found.reason} — модель не вызывается`);
     return;

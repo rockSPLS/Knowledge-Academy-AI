@@ -111,6 +111,36 @@ export async function findPortalMaterial(
   return { ok: true, material: { topic, fragments: chosen.map((i) => toFragment(PORTAL_SECTIONS[i], progress, review)) } };
 }
 
+// Есть ли статья с разделами для «Путешествия по этой статье» — маршрут проверяет до лимита
+export function isPortalArticle(slug: string): boolean {
+  return PORTAL_SECTIONS.some((chunk) => chunk.articleSlug === slug);
+}
+
+// «Путешествие по этой статье» — материал из разделов одной статьи, без поиска: поиск по названию
+// статьи подтягивал разделы соседних статей. Все разделы, кроме переходов, в порядке статьи и до
+// MAX_FRAGMENTS; если их больше, сначала не идёт вступление, затем разделы с конца — кроме разделов
+// «стоит повторить» (их берёт reviewKeys — только из этой статьи). Модель эмбеддингов не нужна.
+// null — такой статьи нет
+export function articlePortalMaterial(
+  slug: string,
+  topic: string,
+  progress: ProgressInput | undefined,
+): PortalMaterial | null {
+  const sections = PORTAL_SECTIONS.filter((chunk) => chunk.articleSlug === slug);
+  if (sections.length === 0) return null;
+  const review = reviewKeys(progress, new Set(sections.map(keyOf)));
+  const isReview = (chunk: IndexedChunk) => review.has(keyOf(chunk));
+  const chosen = [...sections];
+  const intro = chosen.findIndex((chunk) => chunk.sectionId === "" && !isReview(chunk));
+  if (chosen.length > MAX_FRAGMENTS && intro !== -1) chosen.splice(intro, 1);
+  while (chosen.length > MAX_FRAGMENTS) {
+    const last = chosen.findLastIndex((chunk) => !isReview(chunk));
+    if (last === -1) break;
+    chosen.splice(last, 1);
+  }
+  return { topic, fragments: chosen.map((chunk) => toFragment(chunk, progress, review)) };
+}
+
 // Материал по сохранённым id фрагментов — сохранённые ответы (fixtures.ts) собираются
 // без сервиса эмбеддингов. Пометки «стоит повторить» — по присланной сводке, как обычно
 export function portalMaterialFromIds(topic: string, ids: string[], progress: ProgressInput | undefined): PortalMaterial {

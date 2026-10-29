@@ -1,34 +1,45 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import Link from "next/link";
 import { journeyResult, type JourneyResult } from "@/components/journey/results";
 import { journeyHref, journeyStatusText } from "@/components/journey/SavedJourneys";
 import { clearSavedJourneys, type SavedJourney } from "@/components/journey/saved";
 import { BackToArticles } from "@/components/layout/BackToArticles";
+import { PROGRESS_FOR_AI_ANCHOR } from "@/components/review/anchors";
 import { ReviewBlock } from "@/components/review/ReviewBlock";
 import { clearSavedReview } from "@/components/review/storage";
 import { STORAGE_KEY as SEARCH_STORAGE_KEY } from "@/components/search/SearchProvider";
-import type { Verdict } from "@/lib/exercises/types";
+import type { PublicExercise, Verdict } from "@/lib/exercises/types";
 import { plural } from "@/lib/plural";
 import { formatDate, formatDuration } from "@/lib/progress/format";
 import { topicStatus, TOPIC_STATUS_LABELS, type TopicStatus } from "@/lib/progress/mastery";
 import type { AnswerRecord, ArticleTopic, ArticleTopics, ProgressData } from "@/lib/progress/types";
 import { ConfirmDelete, useConfirmDelete } from "./ConfirmDelete";
+import { buildProgressExport, downloadProgress } from "./exportProgress";
 import { useProgressData, useSavedJourneys } from "./hooks";
+import { setProgressForAi, useProgressForAi } from "./progressForAi";
 import { latestAnswers } from "./summary";
 import { clearProgressData } from "./store";
 
 // Страница «Мой прогресс»: сверху четыре карточки (лучший результат теста, время
 // на статьях, путешествия, сколько тем стоит повторить), под ними «Разбор ошибок»
 // (components/review/ReviewBlock.tsx), затем темы статей по разделам,
-// путешествия и «Ваши данные» — что хранится, что уходит модели и удаление всего.
+// путешествия и «Ваши данные» — что хранится, что уходит ИИ, выключатель «Учитывать прогресс
+// в ответах ИИ», «Скачать прогресс» (файл JSON) и удаление всего.
 // Всё считается из прогресса в браузере каждый раз заново: правило «усвоено / стоит
 // повторить» — одно на весь портал (lib/progress/mastery.ts).
 
 const SECTION_HEADING = "text-xl font-semibold";
 
-export function ProgressApp({ articles }: { articles: ArticleTopics }) {
+// exercises — публичная часть упражнений банка: в файле прогресса ответ с выбором записан словами
+export function ProgressApp({
+  articles,
+  exercises,
+}: {
+  articles: ArticleTopics;
+  exercises: Record<string, PublicExercise>;
+}) {
   const data = useProgressData();
   const journeys = useSavedJourneys();
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -70,7 +81,11 @@ export function ProgressApp({ articles }: { articles: ArticleTopics }) {
         </>
       )}
 
-      <YourData canDelete={!isEmpty} onDeleted={() => headingRef.current?.focus()} />
+      <YourData
+        hasProgress={!isEmpty}
+        onDownload={() => downloadProgress(buildProgressExport(data, journeys, articles, exercises))}
+        onDeleted={() => headingRef.current?.focus()}
+      />
     </div>
   );
 }
@@ -284,8 +299,31 @@ function JourneyItem({ journey, result }: { journey: SavedJourney; result: Journ
 
 // ---------- Ваши данные ----------
 
-function YourData({ canDelete, onDeleted }: { canDelete: boolean; onDeleted: () => void }) {
+const DATA_BUTTON =
+  "rounded-md border border-border-strong bg-background px-3 py-1.5 text-sm font-medium hover:bg-border";
+
+// Скачать и удалить — только когда прогресс есть; выключатель — всегда: решить можно и заранее
+function YourData({
+  hasProgress,
+  onDownload,
+  onDeleted,
+}: {
+  hasProgress: boolean;
+  onDownload: () => void;
+  onDeleted: () => void;
+}) {
   const { isConfirming, triggerRef, open, cancel, close } = useConfirmDelete();
+  const withProgress = useProgressForAi();
+  const hintId = useId();
+  const toggleRef = useRef<HTMLInputElement>(null);
+
+  // Пришли по ссылке «Включить» из блока разбора (#progress-for-ai): при загрузке страницы браузер
+  // ищет якорь, пока «Ваших данных» ещё нет, — прокручиваем сами и ставим фокус на выключатель
+  useEffect(() => {
+    if (window.location.hash !== `#${PROGRESS_FOR_AI_ANCHOR}`) return;
+    document.getElementById(PROGRESS_FOR_AI_ANCHOR)?.scrollIntoView();
+    toggleRef.current?.focus({ preventScroll: true });
+  }, []);
 
   function deleteAll() {
     clearProgressData();
@@ -311,28 +349,51 @@ function YourData({ canDelete, onDeleted }: { canDelete: boolean; onDeleted: () 
         путешествия.
       </p>
       <p className="text-sm text-muted">
-        Модели уходит только короткая сводка: какие темы усвоены, какие стоит повторить, и несколько последних ошибок
-        с вашими ответами. Чтобы поиск и разбор ошибок учитывали ваши путешествия, вместе с запросом уходят их
-        названия, понятия и конспекты. Разбору ошибок уходят ещё упражнения путешествий, где были ошибки: вопрос,
-        ваш ответ, в том числе своими словами, и оценка ИИ. Время и даты не уходят.
+        Пока учёт прогресса включён, поиску, разбору ошибок и путешествию по материалам портала уходит короткая
+        сводка: какие темы усвоены, какие стоит повторить, и несколько последних ошибок с вашими ответами. Чтобы
+        поиск и разбор ошибок учитывали ваши путешествия, вместе с запросом уходят их названия, понятия и конспекты.
+        Разбору ошибок уходят ещё упражнения путешествий, где были ошибки: вопрос, ваш ответ, в том числе своими
+        словами, и оценка ИИ. Время и даты не уходят.
       </p>
-      {canDelete &&
-        (isConfirming ? (
-          <ConfirmDelete
-            message="Удалить весь прогресс? Удалятся ответы, время и все сохранённые путешествия. Отменить нельзя."
-            onConfirm={deleteAll}
-            onCancel={cancel}
+      <div id={PROGRESS_FOR_AI_ANCHOR} className="scroll-mt-4 space-y-1">
+        <label className="flex w-fit cursor-pointer items-center gap-2 font-medium">
+          <input
+            ref={toggleRef}
+            type="checkbox"
+            checked={withProgress}
+            onChange={(event) => setProgressForAi(event.target.checked)}
+            aria-describedby={hintId}
+            className="size-4 shrink-0 cursor-pointer accent-accent-fill"
           />
-        ) : (
-          <button
-            ref={triggerRef}
-            type="button"
-            onClick={open}
-            className="rounded-md border border-border-strong bg-background px-3 py-1.5 text-sm font-medium hover:bg-border"
-          >
-            Удалить весь прогресс
-          </button>
-        ))}
+          Учитывать прогресс в ответах ИИ
+        </label>
+        <p id={hintId} className="pl-6 text-sm text-muted">
+          Если выключить, поиск, разбор ошибок и путешествие по материалам портала не получат ваш прогресс. Сам
+          прогресс по-прежнему хранится в этом браузере.
+        </p>
+      </div>
+      {hasProgress && (
+        <>
+          {/* Подтверждение удаления — строкой ниже, «Скачать прогресс» остаётся на месте */}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={onDownload} className={DATA_BUTTON}>
+              Скачать прогресс
+            </button>
+            {!isConfirming && (
+              <button ref={triggerRef} type="button" onClick={open} className={DATA_BUTTON}>
+                Удалить весь прогресс
+              </button>
+            )}
+          </div>
+          {isConfirming && (
+            <ConfirmDelete
+              message="Удалить весь прогресс? Удалятся ответы, время и все сохранённые путешествия. Отменить нельзя."
+              onConfirm={deleteAll}
+              onCancel={cancel}
+            />
+          )}
+        </>
+      )}
     </section>
   );
 }

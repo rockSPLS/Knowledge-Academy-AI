@@ -116,8 +116,9 @@ export function checkReview(output: ReviewOutput, material: ReviewMaterial): Rev
     // статьи — понятное без статьи (topicTitles.ts). Модель то брала понятие в кавычки, то копировала
     // строку списка, а у разделов с общим названием писала «Почему они возникают». Тема узнаётся
     // по первому фрагменту (чекпоинт у понятия, раздел у темы статьи), понятия — первыми: их разделы
-    // могут совпасть с разделом темы статьи. У сохранённых разборов тем нет — как ответила модель,
-    // без кавычек по краям
+    // могут совпасть с разделом темы статьи. По той же теме — вид пункта: у пункта о теме статьи
+    // в браузере ссылка «Путешествие по этой теме». Тема не узнана — название как ответила модель,
+    // без кавычек по краям, и без вида
     const owner =
       material.topics.find((known) => known.kind === "journey" && item.fragments.includes(known.fragments[0])) ??
       material.topics.find((known) => known.kind === "article" && item.fragments.includes(known.fragments[0]));
@@ -126,7 +127,7 @@ export function checkReview(output: ReviewOutput, material: ReviewMaterial): Rev
     const review = cleanText(item.review);
     if (sources.length === 0 || !topic || (!mistake && !review)) return [];
     if (!fitsScripts(topic + mistake + review, allowed)) return [];
-    return [{ topic, mistake, review, sources }];
+    return [{ topic, ...(owner && { kind: owner.kind }), mistake, review, sources }];
   });
   if (items.length === 0) return null;
   const summary = cleanText(output.summary);

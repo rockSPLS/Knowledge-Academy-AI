@@ -31,10 +31,22 @@ const MAX_TEXT_LENGTH = MAX_JOURNEY_TEXT;
 const MAX_BLANK_ANSWER_LENGTH = 60;
 // Калибровка: правильный ответ — слово или фраза, не объяснение
 const MAX_CALIBRATION_EXPECTED_LENGTH = 120;
+// Калибровка: верный ответ, который начинается со слова «да» или «нет» (после кавычек и скобок),
+// — такой вопрос угадывается. «Данные», «нетто» — не «да» и не «нет»
+const YES_NO_ANSWER = /^[\s«"„“'(]*(?:да|нет)(?![\p{L}\p{N}])/iu;
+// Русская буква — проверка языка критериев свободного ответа
+const CYRILLIC = /[а-яё]/i;
 // Задание калибровки одно и то же во всех путешествиях — его задаёт сервер, а не модель
 export const CALIBRATION_QUESTION = "Ответьте своими словами — хватит фразы — и отметьте, насколько уверены";
 
-export type BuildResult<T> = { ok: true; value: T } | { ok: false; error: string };
+// note — что принято с оговоркой (для лога сервера); log — текст ошибки для лога, если в error
+// есть текст модели (он уходит модели при повторе, а в лог не пишется)
+export type BuildResult<T> = { ok: true; value: T; note?: string } | { ok: false; error: string; log?: string };
+
+// Что на последней попытке принимается как есть: калибровка с вопросами «да/нет»,
+// свободный ответ с критериями без русских букв
+type AsIs = { calibration: boolean; criteria: boolean };
+const STRICT: AsIs = { calibration: false, criteria: false };
 
 // ---------- План ----------
 
@@ -88,20 +100,48 @@ export function checkpointId(number: number): string {
   return `c${number}`;
 }
 
-// Собранный чекпоинт; replaced — что заменено запасным упражнением (для лога), иначе null
-export type BuiltCheckpoint = { checkpoint: Checkpoint; replaced: string | null };
+// Собранный чекпоинт; replaced — что заменено запасным упражнением (для лога), иначе null;
+// notes — что принято с оговоркой на последней попытке (калибровка с вопросами «да/нет»,
+// свободный ответ с критериями без русских букв)
+export type BuiltCheckpoint = { checkpoint: Checkpoint; replaced: string | null; notes: string[] };
 
 // Собирает чекпоинт из плана, раскладки и упражнений, написанных моделью.
 // Основное упражнение — первое в списке модели упражнение каждого типа раскладки,
 // запасное — следующее упражнение запасного типа; остальное не используется.
 // Если одно основное упражнение не прошло проверку (или его нет), на его место
 // встаёт запасное — без повторного запроса. Калибровку запасное не заменяет:
-// она в путешествии ровно одна. Две ошибки или негодное запасное — ошибка чекпоинта
+// она в путешествии ровно одна. Две ошибки или негодное запасное — ошибка чекпоинта.
+// lastAttempt — последняя попытка шага (решение владельца): если строго чекпоинт не собрался,
+// путешествие не срывается из-за свободного ответа или калибровки. Сначала негодный свободный
+// ответ заменяет запасное и того же типа, что второе упражнение чекпоинта (тогда в чекпоинте два
+// упражнения одного типа, например два «Верно или неверно»), а калибровка с вопросами «да/нет»
+// принимается как есть (её запасное не заменяет); не вышло — как есть принимается и свободный ответ
+// с критериями без русских букв: только когда заменить его нечем
 export function buildCheckpoint(
   planned: PlanCheckpoint,
   layout: CheckpointLayout,
   number: number,
   generated: CheckpointExercises,
+  lastAttempt = false,
+): BuildResult<BuiltCheckpoint> {
+  const strict = assembleCheckpoint(planned, layout, number, generated, { anySpare: false, asIs: STRICT });
+  if (strict.ok || !lastAttempt) return strict;
+  const withSpare = assembleCheckpoint(planned, layout, number, generated, {
+    anySpare: true,
+    asIs: { calibration: true, criteria: false },
+  });
+  if (withSpare.ok) return withSpare;
+  return assembleCheckpoint(planned, layout, number, generated, { anySpare: true, asIs: { calibration: true, criteria: true } });
+}
+
+// anySpare — свободный ответ заменяет запасное любого типа раскладки; asIs — принимать как есть
+// то, что строго не годится (см. buildCheckpoint)
+function assembleCheckpoint(
+  planned: PlanCheckpoint,
+  layout: CheckpointLayout,
+  number: number,
+  generated: CheckpointExercises,
+  { anySpare, asIs }: { anySpare: boolean; asIs: AsIs },
 ): BuildResult<BuiltCheckpoint> {
   // Основные — по типам раскладки, с позицией в списке модели: она задаёт порядок
   // при равной сложности
@@ -116,13 +156,17 @@ export function buildCheckpoint(
   }
 
   // Слот — место основного упражнения: собранное упражнение или текст ошибки
-  type Slot = { type: GeneratedType; position: number; value: JourneyExercise | null; error: string };
+  type Slot = { type: GeneratedType; position: number; value: JourneyExercise | null; error: string; log: string };
+  const notes: string[] = [];
   const slots = layout.types.map((type): Slot => {
     const main = mains.get(type);
-    const built = main ? buildExercise(main.item, layout.freeAnswerKind) : fail<JourneyExercise>("упражнения этого типа нет");
+    const built = main
+      ? buildExercise(main.item, layout.freeAnswerKind, asIs)
+      : fail<JourneyExercise>("упражнения этого типа нет");
+    if (built.ok && built.note) notes.push(`упражнение ${type}: ${built.note}`);
     return built.ok
-      ? { type, position: main?.position ?? Infinity, value: built.value, error: "" }
-      : { type, position: main?.position ?? Infinity, value: null, error: built.error };
+      ? { type, position: main?.position ?? Infinity, value: built.value, error: "", log: "" }
+      : { type, position: main?.position ?? Infinity, value: null, error: built.error, log: built.log ?? built.error };
   });
 
   let replaced: string | null = null;
@@ -130,19 +174,24 @@ export function buildCheckpoint(
   if (failed.length > 0) {
     const slot = failed[0];
     const error = `упражнение ${slot.type}: ${slot.error}`;
-    // Запасной тип другой — заменяет любое основное, кроме калибровки; тот же — только своё
+    const log = `упражнение ${slot.type}: ${slot.log}`;
+    // Запасной тип другой — заменяет любое основное, кроме калибровки; тот же — только своё,
+    // а на последней попытке и свободный ответ (anySpare)
     const canReplace =
       failed.length === 1 &&
       slot.type !== "calibration" &&
       layout.spare !== null &&
-      (layout.spare === slot.type || !layout.types.includes(layout.spare));
-    if (!canReplace || spare === null) return { ok: false, error };
-    const built = buildExercise(spare.item, layout.freeAnswerKind);
-    if (!built.ok) return { ok: false, error: `${error}; запасное ${layout.spare}: ${built.error}` };
+      (layout.spare === slot.type || !layout.types.includes(layout.spare) || (anySpare && slot.type === "free-answer"));
+    if (!canReplace || spare === null) return { ok: false, error, log };
+    const built = buildExercise(spare.item, layout.freeAnswerKind, asIs);
+    if (!built.ok) {
+      const spareError = `; запасное ${layout.spare}: `;
+      return { ok: false, error: error + spareError + built.error, log: log + spareError + (built.log ?? built.error) };
+    }
     slot.value = built.value;
     // Отсутствующее основное — на месте запасного в списке модели
     if (slot.position === Infinity) slot.position = spare.position;
-    replaced = `${error} — заменено запасным ${layout.spare}`;
+    replaced = `${log} — заменено запасным ${layout.spare}`;
   }
 
   const id = checkpointId(number);
@@ -167,6 +216,7 @@ export function buildCheckpoint(
         exercises,
       },
       replaced,
+      notes,
     },
   };
 }
@@ -178,6 +228,7 @@ export function buildCheckpoint(
 function buildExercise(
   item: GeneratedExercise,
   freeAnswerKind: FreeAnswerKind | null,
+  asIs: AsIs = STRICT,
 ): BuildResult<JourneyExercise> {
   const tooLong = findTooLongText(item);
   if (tooLong) return { ok: false, error: tooLong };
@@ -185,7 +236,7 @@ function buildExercise(
   if ([item.hint, item.question, item.explanation].some(isBlank)) {
     return { ok: false, error: "пустая подсказка, вопрос или объяснение" };
   }
-  const built = buildExerciseBody(item, "", freeAnswerKind);
+  const built = buildExerciseBody(item, "", freeAnswerKind, asIs);
   if (!built.ok) return built;
   // Та же проверка целостности, что у упражнений банка
   const error = validateExercise(built.value);
@@ -197,6 +248,7 @@ function buildExercise(
       difficulty: item.difficulty as Difficulty,
       hint: item.hint.trim(),
     },
+    ...(built.note && { note: built.note }),
   };
 }
 
@@ -204,6 +256,7 @@ function buildExerciseBody(
   item: GeneratedExercise,
   id: string,
   freeAnswerKind: FreeAnswerKind | null,
+  asIs: AsIs,
 ): BuildResult<Exercise> {
   const question = item.question.trim();
   const explanation = item.explanation.trim();
@@ -339,12 +392,18 @@ function buildExerciseBody(
       if (criteria.some((criterion) => criterion === "") || hasDuplicates(criteria)) {
         return fail("критерии пустые или повторяются");
       }
+      // Критерии целиком по-английски — упражнение не годится (решение владельца): по ним ИИ
+      // оценивает ответ, а человек видит их после раскрытия. Английский термин в русском
+      // критерии — годен: достаточно русской буквы хоть в одном критерии. Как есть — только
+      // на последней попытке, если заменить нечем (buildCheckpoint)
+      const english = !criteria.some((criterion) => CYRILLIC.test(criterion));
+      if (english && !asIs.criteria) return fail("в критериях нет ни одной русской буквы — напиши их по-русски");
       if (isBlank(item.sample)) return fail("нужен образец ответа");
       // Вид задания — из раскладки. Свободный ответ стоит в раскладке только вместе
       // с видом — ветка ниже лишь защита (и сужение типа)
       const kind = freeAnswerKind;
       if (kind === null) return fail("в раскладке нет вида свободного ответа");
-      return ok({
+      const freeAnswer: Exercise = {
         id,
         type: "free-answer",
         kind,
@@ -352,7 +411,8 @@ function buildExerciseBody(
         criteria: criteria.map((text, index) => ({ id: `k${index + 1}`, text })),
         sample: item.sample.trim(),
         explanation,
-      });
+      };
+      return english ? { ok: true, value: freeAnswer, note: "принят с критериями без русских букв" } : ok(freeAnswer);
     }
 
     case "calibration": {
@@ -367,18 +427,31 @@ function buildExerciseBody(
       if (items.some((entry) => entry.answer.trim().length > MAX_CALIBRATION_EXPECTED_LENGTH)) {
         return fail(`answer — короткий ответ, не длиннее ${MAX_CALIBRATION_EXPECTED_LENGTH} символов`);
       }
+      // Вопрос, верный ответ которого начинается с «да» или «нет», не годится (решение владельца):
+      // такой ответ угадывается. Отбрасывается, если остальных хватает; иначе шаг повторяется,
+      // и модель получает список таких вопросов, а на последней попытке калибровка принимается
+      // как есть, с пометкой для лога: путешествие не срывается из-за калибровки (buildCheckpoint)
+      const yesNo = items.filter((entry) => YES_NO_ANSWER.test(entry.answer));
+      const kept = items.filter((entry) => !YES_NO_ANSWER.test(entry.answer));
+      const tooFew = kept.length < CALIBRATION_ITEMS_MIN;
+      const listed = yesNo.map((entry) => `«${entry.question.trim().slice(0, 150)}»`).join(", ");
+      // Модели — сами вопросы, в лог — только их число и номера
+      const numbers = items.flatMap((entry, i) => (YES_NO_ANSWER.test(entry.answer) ? [`№ ${i + 1}`] : [])).join(", ");
+      const counted = `вопросы с ответом «да» или «нет»: ${yesNo.length} (${numbers})`;
+      if (tooFew && !asIs.calibration) return fail(`вопросы с ответом «да» или «нет» — переформулируй их: ${listed}`, counted);
       // Порядок вопросов — как у модели: ответы не перемешиваются, подсказывать нечему
-      return ok({
+      const calibration: Exercise = {
         id,
         type: "calibration",
         question: CALIBRATION_QUESTION,
-        items: items.map((entry, index) => ({
+        items: (tooFew ? items : kept).map((entry, index) => ({
           id: `q${index + 1}`,
           question: entry.question.trim(),
           answer: entry.answer.trim(),
         })),
         explanation,
-      });
+      };
+      return tooFew ? { ok: true, value: calibration, note: `принята как есть, ${counted}` } : ok(calibration);
     }
   }
 }
@@ -389,8 +462,8 @@ function ok(exercise: Exercise): BuildResult<Exercise> {
   return { ok: true, value: exercise };
 }
 
-function fail<T = Exercise>(error: string): BuildResult<T> {
-  return { ok: false, error };
+function fail<T = Exercise>(error: string, log?: string): BuildResult<T> {
+  return { ok: false, error, ...(log && { log }) };
 }
 
 function isBlank(value: string): boolean {

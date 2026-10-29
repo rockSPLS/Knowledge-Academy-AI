@@ -59,12 +59,13 @@ export type GenerateResult =
 // Ответ на шаг: проверенное значение или причина неудачи после всех попыток
 type StepResult<T> = { ok: true; value: T } | { ok: false; reason: ModelFailure };
 
-// Один шаг с повтором. check возвращает текст ошибки (уйдёт модели при повторе) или null
+// Один шаг с повтором. accept возвращает значение или текст ошибки (уйдёт модели при повторе);
+// lastAttempt — последняя попытка: проверка может принять с оговоркой то, что раньше вернула бы
 async function runStep<T, R>(
   ask: AskModel,
   step: ModelStep,
   request: Parameters<AskModel>[1] & { schema: z.ZodType<T> },
-  accept: (value: T) => { ok: true; value: R } | { ok: false; error: string },
+  accept: (value: T, lastAttempt: boolean) => { ok: true; value: R } | { ok: false; error: string; log?: string },
 ): Promise<StepResult<R>> {
   let prompt = request.prompt;
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
@@ -79,9 +80,10 @@ async function runStep<T, R>(
       prompt = request.prompt + retryNote(null);
       continue;
     }
-    const accepted = accept(result.data);
+    const accepted = accept(result.data, attempt === ATTEMPTS);
     if (accepted.ok) return accepted;
-    console.error(`[journey] ${describeStep(step)}, попытка ${attempt}: ${accepted.error}`);
+    // В лог — log, если он есть: в error бывает текст модели (вопросы для переформулировки)
+    console.error(`[journey] ${describeStep(step)}, попытка ${attempt}: ${accepted.log ?? accepted.error}`);
     prompt = request.prompt + retryNote(accepted.error);
   }
   return { ok: false, reason: "invalid-output" };
@@ -184,9 +186,10 @@ export async function generateJourney(
           maxOutputTokens: EXERCISES_MAX_OUTPUT_TOKENS,
           abortSignal,
         },
-        (value) => {
-          const built = buildCheckpoint(planned, layouts[index], index + 1, value);
+        (value, lastAttempt) => {
+          const built = buildCheckpoint(planned, layouts[index], index + 1, value, lastAttempt);
           if (!built.ok) return built;
+          for (const note of built.value.notes) console.warn(`[journey] чекпоинт ${index + 1}: ${note}`);
           if (built.value.replaced) console.warn(`[journey] чекпоинт ${index + 1}: ${built.value.replaced}`);
           return { ok: true, value: built.value.checkpoint };
         },

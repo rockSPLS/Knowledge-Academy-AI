@@ -166,14 +166,14 @@ function Result({ result, onSourceClick }: { result: SearchResponse; onSourceCli
               <AnswerText text={paragraph} sources={result.sources} onSourceClick={onSourceClick} />
             </p>
           ))}
-          {/* В материалах ответа нет — источников, на которые ответ опирается, тоже нет */}
-          <p className="text-xs text-subtle">
-            {result.notInMaterials
-              ? "Ответ составлен ИИ."
-              : byProgressOnly
+          {/* В материалах ответа нет — фразу написал код, а не ИИ, поэтому пометки нет */}
+          {!result.notInMaterials && (
+            <p className="text-xs text-subtle">
+              {byProgressOnly
                 ? "Ответ составлен ИИ по вашему прогрессу."
                 : "Ответ составлен ИИ по материалам портала. Сверяйтесь с источниками."}
-          </p>
+            </p>
+          )}
         </div>
       ) : (
         <p className="text-sm text-muted">

@@ -159,6 +159,9 @@ export const askAnswer: AskAnswer = ({ system, prompt, abortSignal, onUsage }) =
     onUsage,
   });
 
+// Ответ, когда в материалах ответа нет (inMaterials = false): фразу пишет код, а не модель
+export const NOT_IN_MATERIALS_TEXT = "Похоже, в материалах портала об этом нет.";
+
 export type SearchRequest = {
   question: string;
   journeys?: JourneySearchInput[];
@@ -195,9 +198,12 @@ export async function searchAndAnswer({
   );
   const result = await ask({ question, chunkIds: chunks.map((chunk) => chunk.id), system: ANSWER_SYSTEM, prompt, abortSignal });
   if (!result.ok) return { ...base, answer: null, notInMaterials: false };
+  // В материалах ответа нет — вместо текста модели готовая фраза от кода (решение владельца):
+  // человеку нужен вывод, а что нашлось — ниже, в «Что нашёл поиск»
+  if (!result.data.inMaterials) return { ...base, answer: { text: NOT_IN_MATERIALS_TEXT }, notInMaterials: true };
   // Письмо, которого нет ни в вопросе, ни во фрагментах, ни в блоке «Прогресс», — сбой ответа
   const answer = checkAnswer(result.data, chunks.length, foreignScripts(prompt));
-  return { ...base, answer, notInMaterials: answer !== null && !result.data.inMaterials };
+  return { ...base, answer, notInMaterials: false };
 }
 
 // Проверка ответа модели: номера источников в тексте — только из переданных фрагментов,

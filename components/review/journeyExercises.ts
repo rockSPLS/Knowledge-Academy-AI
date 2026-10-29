@@ -1,7 +1,7 @@
 import { outcomeVerdict } from "@/components/journey/results";
 import type { SavedJourney } from "@/components/journey/saved";
 import type { ExerciseOutcome } from "@/components/journey/state";
-import type { PublicExercise } from "@/lib/exercises/types";
+import type { ExerciseReviewDetails, PublicExercise } from "@/lib/exercises/types";
 import { MAX_JOURNEY_TEXT, MAX_SUMMARY_TEXT, type ProgressSummary } from "@/lib/progress/types";
 import { MAX_REVIEW_EXERCISES_PER_CONCEPT, reviewShares, type ReviewJourneyExercise } from "@/lib/review/types";
 
@@ -12,6 +12,7 @@ import { MAX_REVIEW_EXERCISES_PER_CONCEPT, reviewShares, type ReviewJourneyExerc
 // целиком), объяснение и оценку ИИ. Всё это лежит в сохранённом путешествии. Ответ своими словами
 // не обрезается: его длину уже ограничило поле ввода, и сервер проверяет тот же предел
 // (lib/review/request.ts); остальные строки — до MAX_JOURNEY_TEXT, как у текста путешествия.
+// Те же описания ответа словами — в файле «Скачать прогресс» (components/progress/exportProgress.ts).
 
 const clip = (value: unknown) => (typeof value === "string" ? value.slice(0, MAX_JOURNEY_TEXT) : "");
 
@@ -19,10 +20,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// Ответ словами вариантов и что в нём неверно — по ответу человека и разбору, который он видел
-function describeChoice(exercise: PublicExercise, outcome: ExerciseOutcome): { answer?: string; errors?: string } {
-  const answer = isRecord(outcome.answer) ? outcome.answer : null;
-  const details = outcome.details;
+// Ответ словами вариантов и что в нём неверно — по ответу человека и разбору, который он видел.
+// Без разбора (ответы в статьях: в прогресс он не записывается) — только ответ словами
+export function describeChoice(
+  exercise: PublicExercise,
+  given: unknown,
+  details?: ExerciseReviewDetails,
+): { answer?: string; errors?: string } {
+  const answer = isRecord(given) ? given : null;
   if (!answer) return {};
   const quote = (text: string) => `«${text}»`;
   const errors: string[] = [];
@@ -88,24 +93,24 @@ function describeChoice(exercise: PublicExercise, outcome: ExerciseOutcome): { a
         errors: errors.join("; "),
       };
     }
+    // «★ Задача со звёздочкой» — только в банке упражнений (в путешествиях её нет); формулировка —
+    // как у сервера (lib/search/progress.ts)
+    case "costed-select": {
+      const selected = Array.isArray(answer.selected) ? answer.selected : [];
+      const texts = exercise.options.filter((option) => selected.includes(option.id)).map((option) => quote(option.text));
+      return { answer: texts.length > 0 ? `взял(а) в промпт: ${texts.join(", ")}` : "ничего не взял(а)" };
+    }
     default:
       return {};
   }
 }
 
-function toReviewExercise(
-  journeyId: string,
-  checkpointId: string,
-  exercise: PublicExercise,
-  outcome: ExerciseOutcome,
-): ReviewJourneyExercise | null {
-  const verdict = outcomeVerdict(outcome);
-  if (verdict === "correct" || verdict === "unrated") return null;
-  const record: ReviewJourneyExercise = {
-    journeyId,
-    checkpointId,
+// Упражнение путешествия — то, что человек видел после проверки, без итога: его считает место вызова
+export type DescribedExercise = Omit<ReviewJourneyExercise, "journeyId" | "checkpointId" | "verdict">;
+
+export function describeJourneyExercise(exercise: PublicExercise, outcome: ExerciseOutcome): DescribedExercise {
+  const record: DescribedExercise = {
     question: clip(exercise.question),
-    verdict,
     explanation: clip(outcome.explanation),
   };
   if (outcome.skipped && outcome.answer === undefined) record.skipped = true;
@@ -138,11 +143,22 @@ function toReviewExercise(
       ];
     });
   } else {
-    const { answer: words, errors } = describeChoice(exercise, outcome);
+    const { answer: words, errors } = describeChoice(exercise, outcome.answer, outcome.details);
     if (words) record.answer = clip(words);
     if (errors) record.errors = clip(errors);
   }
   return record;
+}
+
+function toReviewExercise(
+  journeyId: string,
+  checkpointId: string,
+  exercise: PublicExercise,
+  outcome: ExerciseOutcome,
+): ReviewJourneyExercise | null {
+  const verdict = outcomeVerdict(outcome);
+  if (verdict === "correct" || verdict === "unrated") return null;
+  return { journeyId, checkpointId, verdict, ...describeJourneyExercise(exercise, outcome) };
 }
 
 // articleCount — сколько тем статей стоит повторить (по правилу страницы прогресса)

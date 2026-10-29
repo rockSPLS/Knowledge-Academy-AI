@@ -1,4 +1,5 @@
 import { loadSavedJourneys, type SavedJourney } from "@/components/journey/saved";
+import { isProgressForAi } from "@/components/progress/progressForAi";
 import { loadProgressData } from "@/components/progress/store";
 import { buildProgressSummary, isEmptySummary } from "@/components/progress/summary";
 import { MAX_SEARCH_REQUEST_BYTES } from "@/lib/llm/limits";
@@ -33,7 +34,10 @@ export function toSearchInput(saved: SavedJourney, withVectors = true): JourneyS
   };
 }
 
+// Учёт прогресса в ответах ИИ выключен (components/progress/progressForAi.ts) — ни сводки,
+// ни путешествий: поиск отвечает только по статьям
 export function searchContext(question: string): SearchContext {
+  if (!isProgressForAi()) return {};
   const journeys = loadSavedJourneys();
   const summary = buildProgressSummary(loadProgressData(), journeys);
   const context: SearchContext = {

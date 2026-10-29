@@ -1,7 +1,9 @@
 import "server-only";
 import type { ModelResult } from "@/lib/llm/client";
 import type { JourneySearchInput } from "@/lib/search/types";
-import { fragmentById, type ReviewMaterial } from "./material";
+import { getAllTopics } from "@/lib/progress/topics";
+import { fragmentById, type ReviewMaterial, type ReviewTopic } from "./material";
+import { topicTitle } from "./topicTitles";
 import { reviewSchema, type AskReview, type ReviewOutput } from "./review";
 import articles from "./fixtures/articles.json";
 import badNumbers from "./fixtures/bad-numbers.json";
@@ -34,10 +36,30 @@ export const reviewFixtures: Record<string, ReviewFixture> = {
 
 // Фрагменты сохранённого разбора; null — какого-то фрагмента уже нет в индексе или нужного
 // путешествия нет среди присланных (сначала создайте путешествие из примера)
+// Темы — как у настоящего разбора (material.ts): раздел, к теме которого в разборе есть
+// упражнение, — тема статьи с понятным названием, чекпоинт — понятие. Разделы понятий
+// путешествий идут без упражнений и темами не становятся
 export function fixtureMaterial(fixture: ReviewFixture, journeyList: JourneySearchInput[]): ReviewMaterial | null {
-  const fragments = fixture.fragmentIds.map((id) => fragmentById(id, journeyList));
-  if (fragments.some((fragment) => !fragment)) return null;
-  return { topics: [], fragments: fragments.map((fragment) => fragment!) };
+  const found = fixture.fragmentIds.map((id) => fragmentById(id, journeyList));
+  if (found.some((fragment) => !fragment)) return null;
+  const fragments = found.map((fragment) => fragment!);
+  const topics: ReviewTopic[] = fragments.flatMap((fragment, i): ReviewTopic[] => {
+    if (fragment.kind === "journey") {
+      return [{ kind: "journey", title: fragment.concept, name: fragment.concept, journeyTitle: fragment.journeyTitle, fragments: [i + 1] }];
+    }
+    if (fragment.kind !== "section") return [];
+    const topic = getAllTopics().find((item) => `section:${item.key}` === fragment.id);
+    if (!topic?.exerciseIds.some((id) => fixture.fragmentIds.includes(`exercise:${id}`))) return [];
+    return [
+      {
+        kind: "article",
+        title: topic.path.join(" › "),
+        name: topicTitle(topic.articleSlug, topic.sectionId, topic.path),
+        fragments: [i + 1],
+      },
+    ];
+  });
+  return { topics, fragments };
 }
 
 // «Модель», которая отвечает сохранённым разбором

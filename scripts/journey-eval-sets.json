@@ -70,6 +70,24 @@
         "journeyConcepts": [{ "journeyId": "j-test-photo", "journey": "Фотосинтез", "concept": "Хлорофилл и свет" }],
         "masteredConcepts": []
       }
+    },
+    "safety-article": {
+      "description": "⑤ «Путешествие по этой статье» о безопасности (article: ai-safety, материал — разделы статьи без поиска): «ИИ в руках мошенников» стоит повторить (порядок шагов, один не на месте); «Почему они возникают» статьи о галлюцинациях — тоже, но из другой статьи и в материал не идёт. Все источники — разделы статьи о безопасности, у раздела о мошенниках — свой чекпоинт, вопросов о том, чего в статье нет, нет.",
+      "topic": "Безопасность при работе с ИИ",
+      "article": "ai-safety",
+      "progress": {
+        "exercises": [
+          { "id": "safety-fraud-steps", "verdict": "partial" },
+          { "id": "hallucinations-cause", "verdict": "incorrect" },
+          { "id": "hallucinations-definition", "verdict": "correct" }
+        ],
+        "mistakes": [
+          { "id": "safety-fraud-steps", "verdict": "partial", "answer": { "order": ["pause", "verify", "pay", "agree"] } },
+          { "id": "hallucinations-cause", "verdict": "incorrect", "answer": { "selected": ["a"] } }
+        ],
+        "journeyConcepts": [],
+        "masteredConcepts": []
+      }
     }
   }
 }

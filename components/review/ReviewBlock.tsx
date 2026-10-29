@@ -5,11 +5,13 @@ import Link from "next/link";
 import { ScrollLink } from "@/components/layout/ScrollLink";
 import { ChevronDown, LoaderCircle, TriangleAlert } from "lucide-react";
 import { useHydrated, useProgressData, useSavedJourneys } from "@/components/progress/hooks";
+import { useProgressForAi } from "@/components/progress/progressForAi";
 import { buildProgressSummary, isEmptySummary } from "@/components/progress/summary";
 import { KIND_TAG } from "@/components/search/SearchPanel";
 import { plural } from "@/lib/plural";
 import type { ArticleTopics } from "@/lib/progress/types";
 import type { Review, ReviewFailure, ReviewResponse, ReviewSource } from "@/lib/review/types";
+import { PROGRESS_FOR_AI_ANCHOR, REVIEW_ANCHOR } from "./anchors";
 import { loadFixtureReview, requestReview, ReviewApiError, type ReviewInput } from "./api";
 import {
   collapsedSnapshot,
@@ -36,6 +38,12 @@ import { toReviewList, type ToReviewItem } from "./toReview";
 //   разбора блок развёрнут, свёрнутый остаётся свёрнутым до закрытия вкладки (storage.ts).
 // - Об ИИ сказано один раз: подзаголовок-приглашение — только до разбора, после — ярлык
 //   «Составлено ИИ» у вывода и внизу «Сверяйтесь с источниками.».
+// - Учёт прогресса в ответах ИИ выключен (components/progress/progressForAi.ts) — вместо кнопки
+//   и разбора блок так и говорит, со ссылкой на выключатель. Сохранённый разбор не удаляется
+//   и снова виден, когда учёт включён.
+// - Якорь блока — #review: «Разобрать ошибки» в конце статьи ведёт к нему и разворачивает блок.
+// - У пункта о теме статьи — «Путешествие по этой теме»: форма путешествия по материалам портала
+//   с вписанной темой (/journey?topic=…), строит путешествие сам человек.
 // Ссылки пунктов строит сервер по проверенным номерам фрагментов, текст ИИ выводится как текст.
 
 // Только при разработке: сохранённые разборы (POST /api/review/dev) — блок можно проверять
@@ -58,6 +66,7 @@ const FAILURE_TEXT: Record<ReviewFailure, string> = {
 
 const NO_PROGRESS_TEXT = "Разбирать пока нечего. Ответьте на упражнения в статьях, пройдите тест или путешествие.";
 const NO_MISTAKES_TEXT = "Ошибок нет: последние ответы верные.";
+const OFF_TEXT = "Учёт прогресса в ответах ИИ выключен — разбор строится по прогрессу.";
 
 const BUTTON =
   "rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-accent-fill-foreground transition-colors hover:bg-accent-fill-hover aria-disabled:opacity-60";
@@ -83,6 +92,7 @@ export function ReviewBlock({
   const stored = useSyncExternalStore(subscribeReview, reviewSnapshot, serverReviewSnapshot);
   const saved = hydrated ? stored : null;
   const collapsed = useSyncExternalStore(subscribeReview, collapsedSnapshot, serverCollapsedSnapshot);
+  const withProgress = useProgressForAi();
   const [request, setRequest] = useState<RequestState>({ kind: "idle" });
   const controller = useRef<AbortController | null>(null);
   const headingId = useId();
@@ -94,6 +104,16 @@ export function ReviewBlock({
 
   // Уход со страницы отменяет запрос: сервер отменит и запрос к модели
   useEffect(() => () => controller.current?.abort(), []);
+
+  // Пришли по ссылке «Разобрать ошибки» (#review): свёрнутый блок разворачивается, а когда блок
+  // отрисован, страница прокручивается к нему — при загрузке страницы его ещё не было на месте
+  const isReady = data !== undefined && journeys !== undefined;
+  const sectionRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!isReady || window.location.hash !== `#${REVIEW_ANCHOR}`) return;
+    if (collapsedSnapshot()) saveCollapsed(false);
+    sectionRef.current?.scrollIntoView();
+  }, [isReady]);
 
   // После каждой отрисовки: если ждёт перевод фокуса и нужный блок уже на странице — фокус на него
   useEffect(() => {
@@ -154,7 +174,20 @@ export function ReviewBlock({
   }
 
   let body: React.ReactNode;
-  if (isEmptySummary(summary)) {
+  if (!withProgress) {
+    body = (
+      <p className="text-sm">
+        {OFF_TEXT}{" "}
+        <ScrollLink
+          href={`/progress#${PROGRESS_FOR_AI_ANCHOR}`}
+          onClick={focusProgressToggle}
+          className="text-accent underline underline-offset-4 hover:text-accent-hover"
+        >
+          Включить
+        </ScrollLink>
+      </p>
+    );
+  } else if (isEmptySummary(summary)) {
     body = <p className="text-sm">{NO_PROGRESS_TEXT}</p>;
   } else if (toReview.length === 0) {
     body = <p className="text-sm">{NO_MISTAKES_TEXT}</p>;
@@ -194,7 +227,12 @@ export function ReviewBlock({
 
   return (
     // gap, а не space-y: у свёрнутого блока под заголовком не остаётся отступа скрытого содержимого
-    <section aria-labelledby={headingId} className="flex flex-col gap-4 rounded-xl border border-border p-5">
+    <section
+      ref={sectionRef}
+      id={REVIEW_ANCHOR}
+      aria-labelledby={headingId}
+      className="flex scroll-mt-4 flex-col gap-4 rounded-xl border border-border p-5"
+    >
       <div className="space-y-1">
         <h2 className="text-xl font-semibold">
           <button
@@ -214,11 +252,11 @@ export function ReviewBlock({
           </button>
         </h2>
         {/* Приглашение — только до разбора: над готовым разбором оно повторяло бы ярлык «Составлено ИИ» */}
-        {!saved && !collapsed && <p className="text-sm text-muted">{intro}</p>}
+        {!saved && !collapsed && withProgress && <p className="text-sm text-muted">{intro}</p>}
       </div>
       <div id={bodyId} hidden={collapsed} className="space-y-4">
         {body}
-        {IS_DEV && toReview.length > 0 && (
+        {IS_DEV && withProgress && toReview.length > 0 && (
           <div className="space-y-2 rounded-lg border border-dashed border-border-strong p-3 text-sm">
             <p className="text-muted">Только при разработке: сохранённые разборы без запросов к модели</p>
             <div className="flex flex-wrap gap-2">
@@ -239,6 +277,13 @@ export function ReviewBlock({
       </div>
     </section>
   );
+}
+
+// «Включить» на странице прогресса: выключатель уже на странице — фокус на него, иначе клавиатура
+// и диктор остались бы на ссылке. С другой страницы фокус ставит сама страница прогресса (ProgressApp.tsx)
+function focusProgressToggle() {
+  const toggle = document.querySelector<HTMLInputElement>(`#${PROGRESS_FOR_AI_ANCHOR} input`);
+  if (toggle) setTimeout(() => toggle.focus({ preventScroll: true }));
 }
 
 function ReviewResult({
@@ -283,6 +328,17 @@ function ReviewResult({
                 <SourceLink key={source.href} source={source} />
               ))}
             </ul>
+            {/* Только у темы статьи: у понятия путешествия ссылка на путешествие уже среди источников */}
+            {item.kind === "article" && (
+              <p className="pt-1">
+                <Link
+                  href={`/journey?topic=${encodeURIComponent(item.topic)}`}
+                  className="text-accent underline underline-offset-4 hover:text-accent-hover"
+                >
+                  Путешествие по этой теме
+                </Link>
+              </p>
+            )}
           </li>
         ))}
       </ol>

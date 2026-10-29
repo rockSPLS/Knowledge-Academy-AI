@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { LoaderCircle, ShieldAlert, TriangleAlert } from "lucide-react";
 import { useProgressData } from "@/components/progress/hooks";
+import { useProgressForAi } from "@/components/progress/progressForAi";
 import { MAX_PORTAL_TOPIC_LENGTH, MAX_SOURCE_LENGTH } from "@/lib/llm/limits";
 import { formatTime } from "@/lib/journey/timing";
 import {
@@ -42,15 +43,25 @@ const MODES: { value: FormMode; label: string }[] = [
   { value: "own", label: "Своя тема или текст" },
 ];
 
+// Статья «Путешествия по этой статье»: slug уходит на сервер, название — тема в поле
+export type JourneyArticle = { slug: string; title: string };
+
+// initialTopic — тема из адреса (/journey?topic=… или название статьи из ?article=…): вписана в поле,
+// поле в фокусе, путешествие само не строится. article — пока тема в поле совпадает с названием
+// статьи, материал — разделы этой статьи; тему изменили — обычный поиск по всем статьям
 export function JourneyForm({
   topics,
+  initialTopic,
+  article,
   onCreated,
 }: {
   topics: PortalTopicOption[];
+  initialTopic?: string;
+  article?: JourneyArticle;
   onCreated: (generated: GeneratedJourney) => void;
 }) {
   const [mode, setMode] = useState<FormMode>("portal");
-  const [topic, setTopic] = useState("");
+  const [topic, setTopic] = useState(initialTopic ?? "");
   const [source, setSource] = useState("");
   const [error, setError] = useState<{ text: string; offerOwn: boolean } | null>(null);
   const [isGenerating, setGenerating] = useState(false);
@@ -63,10 +74,17 @@ export function JourneyForm({
   const sourceRef = useRef<HTMLTextAreaElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
   const progress = useProgressData();
-  const toRepeat = progress ? topicsToRepeat(progress, topics) : [];
+  // Учёт прогресса выключен — ИИ не получит темы, которые стоит повторить, и кнопок тем нет
+  const withProgress = useProgressForAi();
+  const toRepeat = progress && withProgress ? topicsToRepeat(progress, topics) : [];
 
   // Ушли со страницы во время генерации — отменяем запрос
   useEffect(() => () => controller.current?.abort(), []);
+
+  // Тема пришла из адреса — поле в фокусе: форма под списком «Мои путешествия» прокручивается к нему
+  useEffect(() => {
+    if (initialTopic) topicRef.current?.focus();
+  }, [initialTopic]);
 
   // Сообщение об ошибке — в фокус, чтобы его прочитал экранный диктор и увидела клавиатура
   useEffect(() => {
@@ -77,6 +95,7 @@ export function JourneyForm({
   const limit = mode === "portal" ? MAX_PORTAL_TOPIC_LENGTH : MAX_SOURCE_LENGTH;
   const trimmed = value.trim();
   const isTooLong = value.length > limit;
+  const byArticle = mode === "portal" && article !== undefined && trimmed === article.title.trim() ? article : undefined;
 
   async function run(request: (signal: AbortSignal) => Promise<GeneratedJourney>) {
     controller.current?.abort();
@@ -118,7 +137,9 @@ export function JourneyForm({
       });
       return;
     }
-    void run((signal) => (mode === "portal" ? generatePortalJourney(trimmed, signal) : generateJourney(trimmed, signal)));
+    void run((signal) =>
+      mode === "portal" ? generatePortalJourney(trimmed, signal, byArticle?.slug) : generateJourney(trimmed, signal),
+    );
   }
 
   function switchMode(next: FormMode) {
@@ -195,7 +216,18 @@ export function JourneyForm({
               className="w-full rounded-lg border border-border-strong bg-background p-3 text-base outline-none focus:border-accent focus:ring-1 focus:ring-accent aria-invalid:border-accent"
             />
             <div id={hintId} className="space-y-1 text-sm text-muted">
-              <p>Путешествие соберётся из разделов статей портала. Темы, которые вам стоит повторить, войдут в путешествие, если они по этой теме.</p>
+              {byArticle ? (
+                <p>
+                  Путешествие соберётся из разделов статьи «{byArticle.title}». Измените тему — и оно соберётся
+                  из разделов всех статей.
+                  {withProgress && " Темы этой статьи, которые вам стоит повторить, войдут в путешествие."}
+                </p>
+              ) : (
+                <p>
+                  Путешествие соберётся из разделов статей портала.
+                  {withProgress && " Темы, которые вам стоит повторить, войдут в путешествие, если они по этой теме."}
+                </p>
+              )}
               <p className="flex items-start gap-1.5">
                 <ShieldAlert size={16} aria-hidden="true" className="mt-0.5 shrink-0 text-accent" />
                 Не вставляйте личные данные: тему обработает внешний сервис ИИ.

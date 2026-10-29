@@ -1,3 +1,4 @@
+import { isProgressForAi } from "@/components/progress/progressForAi";
 import { loadProgressData } from "@/components/progress/store";
 import { buildProgressSummary, isEmptySummary } from "@/components/progress/summary";
 import type { CheckResult } from "@/lib/exercises/types";
@@ -56,9 +57,13 @@ export function generateJourney(source: string, signal: AbortSignal): Promise<Ge
 
 // Путешествие по материалам портала: тема и та же сводка прогресса, что у поиска, — по ней
 // сервер находит темы статей, которые стоит повторить. Путешествия не отправляются
-export function generatePortalJourney(topic: string, signal: AbortSignal): Promise<GeneratedJourney> {
+// article — slug статьи у «Путешествия по этой статье»: материал — разделы этой статьи, без поиска.
+// Учёт прогресса в ответах ИИ выключен — сводки нет (components/progress/progressForAi.ts)
+export function generatePortalJourney(topic: string, signal: AbortSignal, article?: string): Promise<GeneratedJourney> {
+  const base = { topic, ...(article && { article }) };
+  if (!isProgressForAi()) return postJson("/api/journey", base, signal);
   const summary = buildProgressSummary(loadProgressData(), loadSavedJourneys());
-  return postJson("/api/journey", { topic, ...(!isEmptySummary(summary) && { progress: summary }) }, signal);
+  return postJson("/api/journey", { ...base, ...(!isEmptySummary(summary) && { progress: summary }) }, signal);
 }
 
 // Только при разработке: путешествие из сохранённых ответов модели, без запросов к ней

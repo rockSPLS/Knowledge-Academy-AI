@@ -1,11 +1,21 @@
 import "server-only";
 import { z } from "zod";
 import { FREE_ANSWER_KINDS, type FreeAnswerKind } from "@/lib/exercises/types";
-import { CHECKPOINTS_MAX, CHECKPOINTS_MIN, checkPlan } from "./build";
+import { buildCheckpoint, CHECKPOINTS_MAX, CHECKPOINTS_MIN, checkPlan } from "./build";
 import { fixtures, fixtureSource, replayModel, type Fixture } from "./fixtures";
 import { generateJourney } from "./generate";
 import { calibrationIndex, checkLayout, hasMisconception, layoutJourney, type CheckpointLayout } from "./layout";
-import { checkPortalPlan, MAX_REVIEW_FRAGMENTS, portalMaterialFromIds, reviewNumbers, type PortalMaterial } from "./portal";
+import { articles } from "@/lib/articles";
+import type { ProgressInput } from "@/lib/search/request";
+import {
+  articlePortalMaterial,
+  checkPortalPlan,
+  MAX_FRAGMENTS,
+  MAX_REVIEW_FRAGMENTS,
+  portalMaterialFromIds,
+  reviewNumbers,
+  type PortalMaterial,
+} from "./portal";
 import { BASIC_TYPES, checkpointExercisesSchema, planSchema, type BasicType, type GeneratedType, type Plan, type PlanCheckpoint, type PortalPlan } from "./schemas";
 
 // Самопроверка генерации без запросов к модели — только при разработке
@@ -15,6 +25,7 @@ import { BASIC_TYPES, checkpointExercisesSchema, planSchema, type BasicType, typ
 //   после подстановки запасных упражнений, и одни отметки дают одну раскладку;
 // - все сохранённые примеры собираются, их раскладка — ожидаемая;
 // - подстановка запасного упражнения и повтор на изменённых ответах «Фотосинтеза»;
+// - там же — критерии свободного ответа без русских букв и вопросы калибровки с ответом «да/нет»;
 // - минимум элементов в схеме плана доходит до JSON Schema, которую получает модель.
 
 const RANDOM_CASES = 20_000;
@@ -33,6 +44,7 @@ export async function runJourneySelfCheck(): Promise<SelfCheckReport> {
   checkSchema(expect);
   await checkFixtures(expect);
   await checkSpare(expect);
+  await checkLanguageAndYesNo(expect);
   await checkPortalNumbers(expect);
   checkPortalMaterialAndFacts(expect);
   return report;
@@ -275,6 +287,15 @@ const EXPECTED_TYPES: Record<string, GeneratedType[][]> = {
   ],
 };
 
+// Сколько вопросов в калибровке каждого примера
+const EXPECTED_CALIBRATION_ITEMS: Record<string, number> = {
+  photosynthesis: 3,
+  inflation: 4,
+  dough: 4,
+  "portal-hallucinations": 3,
+  vaccines: 4,
+};
+
 const sorted = (types: string[]) => [...types].sort().join(",");
 
 async function checkFixtures(expect: Expect) {
@@ -287,6 +308,14 @@ async function checkFixtures(expect: Expect) {
     );
     const expected = (EXPECTED_TYPES[name] ?? []).map(sorted);
     expect(JSON.stringify(types) === JSON.stringify(expected), `пример ${name}: типы ${JSON.stringify(types)}`);
+    // Вопрос калибровки с ответом «Нет, …» в portal-hallucinations отбрасывается: из четырёх остаётся три
+    const calibrations = result.journey.checkpoints.flatMap((checkpoint) =>
+      checkpoint.exercises.flatMap((item) => (item.exercise.type === "calibration" ? [item.exercise.items.length] : [])),
+    );
+    expect(
+      JSON.stringify(calibrations) === JSON.stringify([EXPECTED_CALIBRATION_ITEMS[name]]),
+      `пример ${name}: вопросов калибровки ${JSON.stringify(calibrations)}`,
+    );
     // Сохранённые оценки ссылаются на упражнения, которые есть в путешествии и оцениваются ИИ
     const exercises = result.journey.checkpoints.flatMap((checkpoint) => checkpoint.exercises.map((item) => item.exercise));
     for (const judge of fixture.judge ?? []) {
@@ -380,6 +409,145 @@ async function checkSpare(expect: Expect) {
     (await typesOf(photosynthesisWith(2, [{ exercises: [calibration, mc, broken(freeAnswer)] }]), 2)) ===
       sorted(["calibration", "multiple-choice"]),
     "свободный ответ не заменён запасным",
+  );
+}
+
+// ---------- Язык критериев и калибровка «да/нет» ----------
+// Подставные ответы второго чекпоинта «Фотосинтеза» (калибровка из трёх вопросов, «Выбор
+// ответа» запасным и свободный ответ): критерии без единой русской буквы — свободный ответ
+// не годится и заменяется запасным, английский термин в русском критерии — годен;
+// вопрос калибровки с ответом «да» или «нет» отбрасывается, если остаётся не меньше трёх; иначе
+// шаг повторяется, а на последней попытке калибровка принимается как есть — и свободный ответ
+// с английскими критериями тоже, если его не заменить запасным. В подставных ответах
+// с одной попыткой второй нет — шаг не собирается (ответ «не по схеме»)
+
+async function checkLanguageAndYesNo(expect: Expect) {
+  const run = (attempts: Exercises[]) => {
+    const fixture = photosynthesisWith(2, attempts);
+    return generateJourney(fixture.source, replayModel(fixture));
+  };
+  const typesIn = async (attempts: Exercises[]) => {
+    const result = await run(attempts);
+    return result.ok
+      ? sorted(result.journey.checkpoints[1].exercises.map((item) => item.exercise.type))
+      : `ошибка: ${result.reason}`;
+  };
+  const [calibration, mc, freeAnswer] = exercisesOf(2);
+  const withCriteria = (criteria: string[]) => ({ ...freeAnswer, criteria });
+  const items = calibration.items as { question: string; answer: string }[];
+  const withItems = (list: { question: string; answer: string }[]) => ({ ...calibration, items: list });
+  const yes = { question: "Нужен ли растению свет для фотосинтеза?", answer: "Да, без света он не идёт." };
+  const no = { question: "Выделяет ли лист кислород в темноте?", answer: "«Нет» — ночью он его поглощает." };
+
+  expect(
+    (await typesIn([{ exercises: [calibration, mc, withCriteria(["Mentions water as the source", "Names oxygen"])] }])) ===
+      sorted(["calibration", "multiple-choice"]),
+    "свободный ответ с критериями без русских букв не заменён запасным",
+  );
+  expect(
+    (await typesIn([{ exercises: [calibration, mc, withCriteria(["Названо понятие light reactions", "Mentions oxygen"])] }])) ===
+      sorted(["calibration", "free-answer"]),
+    "английский термин в русском критерии должен быть годен",
+  );
+  // Критерии по-английски и на повторе: запасное, где оно есть, — раньше; без запасного — как есть
+  const english = withCriteria(["Mentions water as the source", "Names oxygen"]);
+  expect(
+    (await typesIn([{ exercises: [calibration, mc, english] }, { exercises: [calibration, mc, english] }])) ===
+      sorted(["calibration", "multiple-choice"]),
+    "на последней попытке свободный ответ с английскими критериями должен заменяться запасным, если оно есть",
+  );
+  expect(
+    (await typesIn([{ exercises: [calibration, english] }])) === "ошибка: invalid-output",
+    "свободный ответ с английскими критериями без запасного на первой попытке должен отклоняться",
+  );
+  const asIsFree = await run([{ exercises: [calibration, english] }, { exercises: [calibration, english] }]);
+  const freeItem = asIsFree.ok
+    ? asIsFree.journey.checkpoints[1].exercises.find((item) => item.exercise.type === "free-answer")
+    : undefined;
+  expect(
+    freeItem?.exercise.type === "free-answer" && freeItem.exercise.criteria[0]?.text === "Mentions water as the source",
+    "на последней попытке свободный ответ с английскими критериями без запасного должен приниматься как есть",
+  );
+
+  // Раскладка, где запасное того же типа, что второе упражнение («Верно или неверно»): строго оно
+  // свободный ответ не заменяет, а на последней попытке — заменяет, и в чекпоинте два «Верно или неверно».
+  // Сборка чекпоинта напрямую: в сохранённых примерах такой раскладки нет
+  const [trueFalse] = exercisesOf(1);
+  const layout: CheckpointLayout = { types: ["free-answer", "true-false"], freeAnswerKind: "explain", spare: "true-false" };
+  const planned = (fixtures.photosynthesis.plan.at(-1) as Plan).checkpoints[0];
+  const exercises = { exercises: [english, trueFalse, { ...trueFalse, question: `${String(trueFalse.question)} (ещё раз)` }] };
+  const parsed = checkpointExercisesSchema.parse(exercises);
+  const first = buildCheckpoint(planned, layout, 1, parsed, false);
+  const last = buildCheckpoint(planned, layout, 1, parsed, true);
+  expect(!first.ok, "на первой попытке запасное того же типа не должно заменять свободный ответ");
+  expect(
+    last.ok && last.value.checkpoint.exercises.every((item) => item.exercise.type === "true-false") && last.value.checkpoint.exercises.length === 2,
+    `на последней попытке свободный ответ должно заменять запасное «Верно или неверно»: ${JSON.stringify(last.ok ? last.value.checkpoint.exercises.map((item) => item.exercise.type) : last)}`,
+  );
+  const noSpare = buildCheckpoint(planned, layout, 1, checkpointExercisesSchema.parse({ exercises: [english, trueFalse] }), true);
+  expect(
+    noSpare.ok && noSpare.value.checkpoint.exercises.some((item) => item.exercise.type === "free-answer") && noSpare.value.notes.length === 1,
+    "без запасного на последней попытке свободный ответ принимается как есть, с пометкой для лога",
+  );
+  // Калибровку запасное не заменяет никогда, и на последней попытке тоже
+  const calibrationLayout: CheckpointLayout = { types: ["calibration", "free-answer"], freeAnswerKind: "explain", spare: "multiple-choice" };
+  const withoutCalibration = buildCheckpoint(planned, calibrationLayout, 2, checkpointExercisesSchema.parse({ exercises: [mc, freeAnswer] }), true);
+  expect(!withoutCalibration.ok, "без калибровки чекпоинт не собирается и на последней попытке");
+  expect(
+    (await typesIn([{ exercises: [withItems([...items.slice(0, 2), yes]), mc, freeAnswer] }])) === "ошибка: invalid-output",
+    "калибровка из трёх вопросов с ответом «да» на первой попытке должна отклоняться",
+  );
+  expect(
+    (await typesIn([{ exercises: [withItems([...items.slice(0, 2), yes]), mc, freeAnswer] }, { exercises: [calibration, mc, freeAnswer] }])) ===
+      sorted(["calibration", "free-answer"]),
+    "после калибровки с ответом «да» должен пройти повтор",
+  );
+  const fourth = await run([{ exercises: [withItems([...items.slice(0, 1), no, ...items.slice(1)]), mc, freeAnswer] }]);
+  const kept = fourth.ok ? fourth.journey.checkpoints[1].exercises.find((item) => item.exercise.type === "calibration") : undefined;
+  expect(
+    kept?.exercise.type === "calibration" &&
+      kept.exercise.items.length === 3 &&
+      kept.exercise.items.every((item) => item.question !== no.question),
+    "из четырёх вопросов калибровки вопрос с ответом «нет» должен отбрасываться",
+  );
+  expect(
+    (await typesIn([{ exercises: [withItems([...items.slice(0, 2), yes, no]), mc, freeAnswer] }])) === "ошибка: invalid-output",
+    "калибровка, где без «да/нет» остаётся меньше трёх вопросов, на первой попытке должна отклоняться",
+  );
+  // На последней попытке — как есть, вместе с вопросами «да/нет»
+  const calibrationOf = async (attempts: Exercises[]) => {
+    const result = await run(attempts);
+    const found = result.ok ? result.journey.checkpoints[1].exercises.find((item) => item.exercise.type === "calibration") : undefined;
+    return found?.exercise.type === "calibration" ? found.exercise.items.map((item) => item.question) : null;
+  };
+  const threeWithYes = withItems([...items.slice(0, 2), yes]);
+  const asIsThree = await calibrationOf([{ exercises: [threeWithYes, mc, freeAnswer] }, { exercises: [threeWithYes, mc, freeAnswer] }]);
+  expect(
+    asIsThree?.length === 3 && asIsThree.includes(yes.question),
+    `на последней попытке калибровка из трёх вопросов с «да» должна приниматься как есть: ${JSON.stringify(asIsThree)}`,
+  );
+  const fourWithBoth = withItems([...items.slice(0, 2), yes, no]);
+  const asIsFour = await calibrationOf([{ exercises: [fourWithBoth, mc, freeAnswer] }, { exercises: [fourWithBoth, mc, freeAnswer] }]);
+  expect(
+    asIsFour?.length === 4,
+    `на последней попытке калибровка из четырёх вопросов с «да» и «нет» должна приниматься как есть: ${JSON.stringify(asIsFour)}`,
+  );
+  // Калибровка с «да/нет» и английские критерии в одном чекпоинте: калибровка — как есть,
+  // а свободный ответ заменяет запасное «Выбор ответа», а не принимается как есть
+  const bothBad = await calibrationOf([
+    { exercises: [threeWithYes, mc, english] },
+    { exercises: [threeWithYes, mc, english] },
+  ]);
+  expect(
+    bothBad?.includes(yes.question) === true &&
+      (await typesIn([{ exercises: [threeWithYes, mc, english] }, { exercises: [threeWithYes, mc, english] }])) ===
+        sorted(["calibration", "multiple-choice"]),
+    "калибровка с «да/нет» — как есть, а свободный ответ с английскими критериями — запасным, если оно есть",
+  );
+  expect(
+    (await typesIn([{ exercises: [withItems([...items.slice(0, 2), { question: "Что нужно растению, кроме света?", answer: "Данные о почве не нужны — нужна вода." }]), mc, freeAnswer] }])) ===
+      sorted(["calibration", "free-answer"]),
+    "ответ, который начинается со слова «Данные», — не «да»",
   );
 }
 
@@ -486,6 +654,8 @@ function checkPortalMaterialAndFacts(expect: Expect) {
     `разделов с пометкой «стоит повторить» должно быть ${MAX_REVIEW_FRAGMENTS}, от последних ошибок: ${marked.join(", ")}`,
   );
 
+  checkArticleMaterial(expect, progress);
+
   const fixture = fixtures["portal-hallucinations"];
   if (!fixture?.portal) return;
   const good = structuredClone(fixture.plan.at(-1) as PortalPlan);
@@ -499,4 +669,35 @@ function checkPortalMaterialAndFacts(expect: Expect) {
       checked.value.plan.checkpoints[0].summary === good.checkpoints[0].summary,
     "ключевой факт по-английски должен отбрасываться, а конспект — оставаться как есть",
   );
+}
+
+// «Путешествие по этой статье»: материал — разделы одной статьи без переходов, до MAX_FRAGMENTS
+// (лишним первым уходит вступление), пометки «стоит повторить» — только у тем этой статьи
+function checkArticleMaterial(expect: Expect, progress: ProgressInput) {
+  for (const { slug } of articles) {
+    const material = articlePortalMaterial(slug, "Название", progress);
+    const ids = material?.fragments.map((fragment) => fragment.id) ?? [];
+    expect(
+      material !== null &&
+        ids.length > 0 &&
+        ids.length <= MAX_FRAGMENTS &&
+        ids.every((id) => id.startsWith(`section:${slug}`) && !/#(chto-dalshe|itog-tsikla)$/.test(id)),
+      `путешествие по статье ${slug}: разделы ${ids.join(", ")}`,
+    );
+  }
+  // В статье о том, как работают модели, 9 разделов без перехода — вступление не идёт
+  const llm = articlePortalMaterial("how-llm-works", "Название", undefined);
+  expect(
+    llm?.fragments.length === MAX_FRAGMENTS && llm.fragments.every((fragment) => fragment.id !== "section:how-llm-works"),
+    "в путешествии по статье сверх предела первым должно уходить вступление",
+  );
+  // В сводке ошибки и в статье о галлюцинациях, и в статье о структуре промпта
+  const marked = (articlePortalMaterial("hallucinations", "Название", progress)?.fragments ?? [])
+    .filter((fragment) => fragment.review)
+    .map((fragment) => fragment.id);
+  expect(
+    marked.length === MAX_REVIEW_FRAGMENTS && marked.every((id) => id.startsWith("section:hallucinations#")),
+    `пометки «стоит повторить» в путешествии по статье — только у её тем: ${marked.join(", ")}`,
+  );
+  expect(articlePortalMaterial("no-such-article", "Название", progress) === null, "статьи нет — материала нет");
 }

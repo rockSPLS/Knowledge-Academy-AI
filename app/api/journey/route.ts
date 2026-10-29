@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { askModel, generateJourney } from "@/lib/journey/generate";
-import { findPortalMaterial, isPortalSearchConfigured, type PortalMaterial } from "@/lib/journey/portal";
+import {
+  articlePortalMaterial,
+  findPortalMaterial,
+  isPortalArticle,
+  isPortalSearchConfigured,
+  type PortalMaterial,
+} from "@/lib/journey/portal";
 import { toPublicJourney } from "@/lib/journey/public";
 import { isSealConfigured, sealJourney } from "@/lib/journey/seal";
 import { MAX_PORTAL_TOPIC_LENGTH, MAX_REQUEST_BYTES, MAX_SOURCE_LENGTH } from "@/lib/llm/limits";
@@ -11,7 +17,9 @@ import { parseSearchContext } from "@/lib/search/request";
 
 // POST /api/journey — генерация путешествия.
 // Принимает { source } — своя тема или текст — или { topic, progress? } — тема из материалов
-// портала и сводка прогресса (та же, что у поиска; разбирается по одной записи).
+// портала и сводка прогресса (та же, что у поиска; разбирается по одной записи) — или
+// { topic, article, progress? } — «Путешествие по этой статье»: материал — разделы статьи
+// article, без поиска и без модели эмбеддингов; статьи такой нет — 400.
 // Возвращает { journey, sealed }: journey — публичная часть (без правильных ответов
 // и подсказок), sealed — зашифрованное путешествие целиком; браузер присылает его обратно
 // при проверке ответов. По материалам портала: ничего не нашлось — 422 not-in-materials,
@@ -22,7 +30,10 @@ export const maxDuration = 300;
 
 const requestSchema = z.union([
   z.object({ source: z.string().trim().min(1).max(MAX_SOURCE_LENGTH) }),
-  z.object({ topic: z.string().trim().min(1).max(MAX_PORTAL_TOPIC_LENGTH) }),
+  z.object({
+    topic: z.string().trim().min(1).max(MAX_PORTAL_TOPIC_LENGTH),
+    article: z.string().max(100).optional(),
+  }),
 ]);
 
 export async function POST(request: Request) {
@@ -39,10 +50,17 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  const portal = "topic" in parsed.data;
+  const article = "topic" in parsed.data ? parsed.data.article : undefined;
+  const search = "topic" in parsed.data && article === undefined;
 
-  // Без модели эмбеддингов искать нечем — запроса нет вовсе, лимит не тратится
-  if (portal && !isPortalSearchConfigured()) return portalFailureResponse("unavailable");
+  // Статьи нет — запроса нет, лимит не тратится
+  if (article !== undefined && !isPortalArticle(article)) {
+    return Response.json({ code: "bad-request", error: "Такой статьи нет" }, { status: 400 });
+  }
+
+  // Без модели эмбеддингов искать нечем — запроса нет вовсе, лимит не тратится.
+  // Путешествию по одной статье поиск не нужен
+  if (search && !isPortalSearchConfigured()) return portalFailureResponse("unavailable");
 
   const limit = consumeModelRequest(request);
   if (!limit.ok) return rateLimitedResponse(limit.retryAfterSec);
@@ -57,12 +75,17 @@ export async function POST(request: Request) {
   if ("topic" in parsed.data) {
     // Сводка — данные из браузера: негодные записи пропускаются, а не ломают запрос
     const { progress } = parseSearchContext({ progress: (body.data as { progress?: unknown }).progress }, "journey");
-    const found = await findPortalMaterial(parsed.data.topic, progress, request.signal);
-    if (!found.ok) {
-      if (found.reason === "not-in-materials") console.log("[journey] по теме в материалах портала ничего не нашлось — модель не вызывается");
-      return portalFailureResponse(found.reason);
+    const material = article !== undefined ? articlePortalMaterial(article, parsed.data.topic, progress) : null;
+    if (material) {
+      source = material;
+    } else {
+      const found = await findPortalMaterial(parsed.data.topic, progress, request.signal);
+      if (!found.ok) {
+        if (found.reason === "not-in-materials") console.log("[journey] по теме в материалах портала ничего не нашлось — модель не вызывается");
+        return portalFailureResponse(found.reason);
+      }
+      source = found.material;
     }
-    source = found.material;
   } else {
     source = parsed.data.source;
   }
